@@ -1,11 +1,12 @@
 package it.l_soft.wows.indicators.composite;
 
 import it.l_soft.wows.comms.Bar;
-import it.l_soft.wows.indicators.Indicator;
+import it.l_soft.wows.indicators.AbstractIndicator;
 import it.l_soft.wows.indicators.momentum.StochasticK;
 import it.l_soft.wows.indicators.trend.SMA;
 
-public final class StochasticD implements Indicator {
+public final class StochasticD extends AbstractIndicator {
+	
     private final StochasticK k;
     private final SMA d; // SMA over %K
 

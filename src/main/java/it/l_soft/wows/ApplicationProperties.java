@@ -9,6 +9,8 @@ import java.util.Properties;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import it.l_soft.wows.comms.Price;
+
 
 public class ApplicationProperties {
 	private static ApplicationProperties instance = null;
@@ -24,7 +26,25 @@ public class ApplicationProperties {
 	private boolean consoleOut;
 	private long shutdownGracePeriod;
 	private String indicatorsToInstantiate;
-	
+
+	// GA configuration
+	private int geneSize = 5;                  // indicators per gene
+	private int populationSize = 200;
+	private int horizonBars = 1;               // predict next bar’s direction over this horizon
+	private double holdThresholdPct = 0.1;     // abs % change <= this ⇒ HOLD
+	private double elitePct = 0.25;            // survive unchanged
+    private double crossoverPct = 0.50;        // produced by crossover
+    private double replacePct = 0.25;          // random new
+    private double mutationRate = 0.08;        // per child
+    private double mutationSwapRate = 0.30;    // chance to swap two loci in a gene
+    private int  minBarsBeforeScoring = 50;    // gene must see at least this many bars
+    private boolean earlyCullAtEliteFloor = true;
+    private int atrPeriodForScaling = 14;      // used to scale unbounded signals
+    private double macdToAtrScale = 1.0;       // scale factor for MACD hist vs ATR
+    private Price defaultPrice = Price.CLOSE;  // for trend comparators, etc.
+    private int validScoreHistoryLength = 100; // number of backward bars to consider for ranking
+    
+
 //	private int SMACrossing_ShortWindow = 50;
 //	private int SMACrossing_LongWindow = 200;
 //	
@@ -186,7 +206,83 @@ public class ApplicationProperties {
 	        {
 	        	indicatorsToInstantiate = properties.getProperty(variable).trim();
 	        }	        
-//	        variable = "SMACrossing_ShortWindow";
+	    	variable = "earlyCullAtEliteFloor";
+	        if (properties.getProperty(variable) != null)
+	        {
+	        	earlyCullAtEliteFloor = Boolean.parseBoolean(properties.getProperty(variable).trim());
+	        }	
+	    	variable = "defaultPrice";
+	        if (properties.getProperty(variable) != null)
+	        {
+	        	defaultPrice = Price.parsePrice(properties.getProperty(variable).trim());
+	        }	
+	    	variable = "geneSize";
+	        if (properties.getProperty(variable) != null)
+	        {
+	        	geneSize = Integer.parseInt(properties.getProperty(variable).trim());
+	        }	
+	    	variable = "populationSize";
+	        if (properties.getProperty(variable) != null)
+	        {
+	        	populationSize = Integer.parseInt(properties.getProperty(variable).trim());
+	        }	
+	    	variable = "horizonBars";
+	        if (properties.getProperty(variable) != null)
+	        {
+	        	horizonBars = Integer.parseInt(properties.getProperty(variable).trim());
+	        }
+	    	variable = "minBarsBeforeScoring";
+	        if (properties.getProperty(variable) != null)
+	        {
+	        	minBarsBeforeScoring = Integer.parseInt(properties.getProperty(variable).trim());
+	        }
+	    	variable = "atrPeriodForScaling";
+	        if (properties.getProperty(variable) != null)
+	        {
+	        	atrPeriodForScaling = Integer.parseInt(properties.getProperty(variable).trim());
+	        }
+	    	variable = "holdThresholdPct";
+	        if (properties.getProperty(variable) != null)
+	        {
+	        	holdThresholdPct = Double.parseDouble(properties.getProperty(variable).trim());
+	        }
+	    	variable = "elitePct";
+	        if (properties.getProperty(variable) != null)
+	        {
+	        	elitePct = Double.parseDouble(properties.getProperty(variable).trim());
+	        }
+	    	variable = "crossoverPct";
+	        if (properties.getProperty(variable) != null)
+	        {
+	        	crossoverPct = Double.parseDouble(properties.getProperty(variable).trim());
+	        }
+	    	variable = "replacePct";
+	        if (properties.getProperty(variable) != null)
+	        {
+	        	replacePct = Double.parseDouble(properties.getProperty(variable).trim());
+	        }
+	    	variable = "mutationRate";
+	        if (properties.getProperty(variable) != null)
+	        {
+	        	mutationRate = Double.parseDouble(properties.getProperty(variable).trim());
+	        }
+	    	variable = "mutationSwapRate";
+	        if (properties.getProperty(variable) != null)
+	        {
+	        	mutationSwapRate = Double.parseDouble(properties.getProperty(variable).trim());
+	        }
+	    	variable = "macdToAtrScale";
+	        if (properties.getProperty(variable) != null)
+	        {
+	        	macdToAtrScale = Double.parseDouble(properties.getProperty(variable).trim());
+	        }
+	    	variable = "validScoreHistoryLength";
+	        if (properties.getProperty(variable) != null)
+	        {
+	        	validScoreHistoryLength = Integer.parseInt(properties.getProperty(variable).trim());
+	        }
+	        
+	        //	        variable = "SMACrossing_ShortWindow";
 //	        if (properties.getProperty(variable) != null)
 //	        {
 //	        	SMACrossing_ShortWindow = Integer.parseInt(properties.getProperty(variable).trim());
@@ -427,6 +523,66 @@ public class ApplicationProperties {
 
 	public String getIndicatorsToInstantiate() {
 		return indicatorsToInstantiate;
+	}
+
+	public int getGeneSize() {
+		return geneSize;
+	}
+
+	public int getPopulationSize() {
+		return populationSize;
+	}
+
+	public int getHorizonBars() {
+		return horizonBars;
+	}
+
+	public double getHoldThresholdPct() {
+		return holdThresholdPct;
+	}
+
+	public double getElitePct() {
+		return elitePct;
+	}
+
+	public double getCrossoverPct() {
+		return crossoverPct;
+	}
+
+	public double getReplacePct() {
+		return replacePct;
+	}
+
+	public double getMutationRate() {
+		return mutationRate;
+	}
+
+	public double getMutationSwapRate() {
+		return mutationSwapRate;
+	}
+
+	public int getMinBarsBeforeScoring() {
+		return minBarsBeforeScoring;
+	}
+
+	public boolean isEarlyCullAtEliteFloor() {
+		return earlyCullAtEliteFloor;
+	}
+
+	public int getAtrPeriodForScaling() {
+		return atrPeriodForScaling;
+	}
+
+	public double getMacdToAtrScale() {
+		return macdToAtrScale;
+	}
+
+	public Price getDefaultPrice() {
+		return defaultPrice;
+	}
+
+	public int getValidScoreHistoryLength() {
+		return validScoreHistoryLength;
 	}
 	
 //	public int getSMACrossing_ShortWindow() {

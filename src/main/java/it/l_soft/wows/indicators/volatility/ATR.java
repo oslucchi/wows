@@ -2,7 +2,7 @@ package it.l_soft.wows.indicators.volatility;
 
 import it.l_soft.wows.comms.Bar;
 import it.l_soft.wows.comms.Price;
-import it.l_soft.wows.indicators.Indicator;
+import it.l_soft.wows.indicators.AbstractIndicator;
 
 /**
  * Streaming ATR (Wilder's).
@@ -19,7 +19,7 @@ import it.l_soft.wows.indicators.Indicator;
  *  - Returns Double.NaN until 'period' bars have been processed.
  *  - If period == 1, ATR equals TR each bar.
  */
-public final class ATR implements Indicator {
+public final class ATR extends AbstractIndicator {
     private int period = 0;
 
     // State

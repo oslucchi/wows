@@ -4,7 +4,7 @@ import java.util.function.ToDoubleFunction;
 
 import it.l_soft.wows.comms.Bar;
 import it.l_soft.wows.comms.Price;
-import it.l_soft.wows.indicators.Indicator;
+import it.l_soft.wows.indicators.AbstractIndicator;
 
 /**
  * Streaming Bollinger Bands.
@@ -19,8 +19,9 @@ import it.l_soft.wows.indicators.Indicator;
  * Note: 'k' is an integer multiplier here (commonly 2). If you need fractional k (e.g., 2.5),
  * extend your regex/factory to accept doubles and add a (int, double, Price) ctor.
  */
-public final class Bollinger implements Indicator {
-    private final int period;
+public final class Bollinger extends AbstractIndicator {
+
+	private final int period;
     private final int k; // band width multiplier (commonly 2)
     private final ToDoubleFunction<Bar> input;
 

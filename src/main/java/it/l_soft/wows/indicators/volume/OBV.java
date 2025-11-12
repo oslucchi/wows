@@ -1,14 +1,14 @@
 package it.l_soft.wows.indicators.volume;
 
 import it.l_soft.wows.comms.Bar;
-import it.l_soft.wows.indicators.Indicator;
+import it.l_soft.wows.indicators.AbstractIndicator;
 
 /**
  * Streaming On-Balance Volume (OBV).
  * obv_t = obv_{t-1} + sign(close_t - close_{t-1}) * volume_t
  * Returns NaN until a prior close exists.
  */
-public final class OBV implements Indicator {
+public final class OBV extends AbstractIndicator {
     private long  lastVolume = 0L;         // not strictly needed, but kept for clarity
     private double lastClose = Double.NaN; // prior close
     private double obv = NOT_DEFINED;

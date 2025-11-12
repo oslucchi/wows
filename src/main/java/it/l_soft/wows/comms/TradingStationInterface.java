@@ -12,9 +12,10 @@ import java.util.List;
 import org.apache.log4j.Logger;
 
 import it.l_soft.wows.ApplicationProperties;
-import it.l_soft.wows.ga.GAConfig;
 import it.l_soft.wows.ga.GAEngine;
+import it.l_soft.wows.ga.Gene;
 import it.l_soft.wows.indicators.Indicator;
+import it.l_soft.wows.indicators.volatility.ATR;
 import it.l_soft.wows.utils.JSONWrapper;
 import it.l_soft.wows.utils.Utilities;
 
@@ -27,15 +28,15 @@ public class TradingStationInterface extends Thread {
 	InputStream input;
 	Socket socket = null;
 	List<Indicator> indicators;
-	GAConfig cfg;
 	GAEngine ga;
+	MarketBar prevBar = null;
+	MarketBar currBar = null;
 	
 	boolean shutdown = false;
 	public TradingStationInterface(List<Indicator> indicators)
 	{
 		this.indicators = indicators;
-		cfg = new GAConfig();
-		ga = new GAEngine(cfg, indicators);
+		ga = new GAEngine(indicators);
 	}
 	
 	public Message readMessageFromSocket()
@@ -118,7 +119,6 @@ public class TradingStationInterface extends Thread {
     private void handleIncomingMessages()
     {
 		Message message = null;
-		MarketBar bar;
 		TradeMessage trade;
 
 		while (!shutdown)
@@ -142,25 +142,55 @@ public class TradingStationInterface extends Thread {
 			}
 //			ZonedDateTime z = ((Message) message).getTimestamp()
 //								.toInstant().atZone(ZoneId.systemDefault());
-			log.debug("Received message: topic '" + message.getTopic() + "', " +
+			log.trace("Received message: topic '" + message.getTopic() + "', " +
 					  "timestamp: " + message.getTimestamp());
 			switch(((Message) message).getTopic())
 			{
 			case "B":
 				log.trace("The message is a market bar.");
-				bar = (MarketBar) message;
-				log.debug("Open " + bar.getOpen() + 
-						  " High " + bar.getHigh() + 
-						  " Low " + bar.getLow() + 
-						  " Close " + bar.getClose());
+				currBar = (MarketBar) message;
+				log.debug("New bar received: Open " + currBar.getOpen() + 
+						  " High " + currBar.getHigh() + 
+						  " Low " + currBar.getLow() + 
+						  " Close " + currBar.getClose());
+				log.trace("updating indicators");
 				for(Indicator indicator : indicators)
 				{
-					indicator.add(bar);
-					log.debug("Indicatore: " + indicator.getClass().getSimpleName() + 
-							  ", periodo: " + barNumber + 
-							  ", valore: " +indicator.value());	
+					indicator.add(currBar);
+					indicator.normalizeAndStore(currBar, (ATR) indicators.get(0), props);
+					log.trace("Indicator: " + indicator.getClass().getSimpleName() + 
+							  ", normalizedValue : " + indicator.getNormalizedValue());
+
 				}
-				ga.onBar(bar);
+				if (prevBar != null)
+				{
+					Double mktMovePercent = 1000 * 
+											((currBar.getClose() - prevBar.getClose()) / 
+											 prevBar.getClose());
+					int marketMove = mktMovePercent.intValue();
+					if (marketMove > 50)
+						marketMove = 50;
+					else if (marketMove < -50)
+						marketMove = -50;
+					log.debug("mktMovePercent: " + mktMovePercent + ", marketMove " + marketMove);
+					
+					for(Gene g : ga.getPopulation())
+					{
+						String geneIndicators = "";
+						int prediction = 0;
+						for(int i : g.indicatorsIndex)
+						{
+							prediction += indicators.get(i).getNormalizedValue();
+							geneIndicators += indicators.get(i).getName() + " ";
+						}
+						g.addScore(marketMove, (int) (prediction / props.getGeneSize()));
+						log.debug("Gene indicators: " + geneIndicators + 
+								  ", prediction: " + prediction +
+								  ", score: " + g.score); 
+					}
+				}
+				prevBar = currBar;
+//				ga.evolve();
 				barNumber++;
 				break;
 				

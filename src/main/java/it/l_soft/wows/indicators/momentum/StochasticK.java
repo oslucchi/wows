@@ -2,7 +2,7 @@ package it.l_soft.wows.indicators.momentum;
 
 import it.l_soft.wows.comms.Bar;
 import it.l_soft.wows.comms.Price;
-import it.l_soft.wows.indicators.Indicator;
+import it.l_soft.wows.indicators.AbstractIndicator;
 
 import java.util.ArrayDeque;
 
@@ -13,7 +13,8 @@ import java.util.ArrayDeque;
  * Rolling min/max maintained with monotonic deques (O(1) amortized).
  * Returns Double.NaN until 'period' bars processed.
  */
-public final class StochasticK implements Indicator {
+public final class StochasticK extends AbstractIndicator {
+	
     private final int period;
 
     // Monotonic deques store (value, index) pairs; head is current min/max.

@@ -4,7 +4,7 @@ import java.util.function.ToDoubleFunction;
 
 import it.l_soft.wows.comms.Bar;
 import it.l_soft.wows.comms.Price;
-import it.l_soft.wows.indicators.Indicator;
+import it.l_soft.wows.indicators.AbstractIndicator;
 
 /**
  * Streaming RSI (Wilder's) with O(1) memory.
@@ -14,7 +14,8 @@ import it.l_soft.wows.indicators.Indicator;
  *      avgLoss = (prevAvgLoss * (period - 1) + loss) / period
  * - Returns Double.NaN until ready.
  */
-public final class RSI implements Indicator {
+public final class RSI extends AbstractIndicator {
+	
     private final int period;
     private final ToDoubleFunction<Bar> input;
 

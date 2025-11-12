@@ -6,15 +6,12 @@ import java.io.InputStreamReader;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 import org.apache.log4j.Appender;
 import org.apache.log4j.ConsoleAppender;
 import org.apache.log4j.Level;
 import org.apache.log4j.Logger;
 
-import it.l_soft.wows.comms.Price;
 import it.l_soft.wows.comms.TradingStationInterface;
 import it.l_soft.wows.indicators.Indicator;
 import it.l_soft.wows.indicators.IndicatorFactory;

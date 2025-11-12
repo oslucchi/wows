@@ -1,7 +1,7 @@
 package it.l_soft.wows.indicators.bands;
 
 import it.l_soft.wows.comms.Bar;
-import it.l_soft.wows.indicators.Indicator;
+import it.l_soft.wows.indicators.AbstractIndicator;
 
 import java.util.ArrayDeque;
 import java.util.Deque;
@@ -15,8 +15,9 @@ import java.util.Deque;
  *
  * Returns NOT_DEFINED until at least N bars are seen.
  */
-public final class Donchian implements Indicator {
-    private final int period;
+public final class Donchian extends AbstractIndicator {
+
+	private final int period;
     private final Deque<Double> highs;
     private final Deque<Double> lows;
 

@@ -4,7 +4,7 @@ import java.util.function.ToDoubleFunction;
 
 import it.l_soft.wows.comms.Bar;
 import it.l_soft.wows.comms.Price;
-import it.l_soft.wows.indicators.Indicator;
+import it.l_soft.wows.indicators.AbstractIndicator;
 import it.l_soft.wows.indicators.trend.EMA;
 import it.l_soft.wows.indicators.volatility.ATR;
 
@@ -18,7 +18,8 @@ import it.l_soft.wows.indicators.volatility.ATR;
  * - Returns Double.NaN (NOT_DEFINED) until both EMA and ATR are defined.
  * - Typical defaults: period=20, atrPeriod=20, multiplier=2.0, price=CLOSE.
  */
-public final class Keltner implements Indicator {
+public final class Keltner extends AbstractIndicator {
+	
     private final EMA emaMid;
     private final ATR atr;
     private final double multiplier;

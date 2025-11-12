@@ -4,7 +4,7 @@ import java.util.function.ToDoubleFunction;
 
 import it.l_soft.wows.comms.Bar;
 import it.l_soft.wows.comms.Price;
-import it.l_soft.wows.indicators.Indicator;
+import it.l_soft.wows.indicators.AbstractIndicator;
 
 /**
  * Streaming Rate of Change (ROC), percent version:
@@ -15,7 +15,8 @@ import it.l_soft.wows.indicators.Indicator;
  * - Uses a ring buffer to access P_{t-n} in O(1).
  * - If P_{t-n} == 0, returns NOT_DEFINED to avoid division by zero.
  */
-public final class ROC implements Indicator {
+public final class ROC extends AbstractIndicator {
+	
     private int period;
     private ToDoubleFunction<Bar> input;
 

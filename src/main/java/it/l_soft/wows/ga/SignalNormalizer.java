@@ -1,5 +1,6 @@
 package it.l_soft.wows.ga;
 
+import it.l_soft.wows.ApplicationProperties;
 import it.l_soft.wows.comms.Bar;
 import it.l_soft.wows.indicators.Indicator;
 import it.l_soft.wows.indicators.bands.Bollinger;
@@ -24,7 +25,7 @@ final class SignalNormalizer {
      * For some indicators we need the current bar (for price, ATR, band positions).
      * Provide a shared ATR (atrForScaling) already fed each bar to stabilize scaling.
      */
-    static double normalize(Indicator ind, Bar bar, ATR atrForScaling, GAConfig cfg) {
+    static double normalize(Indicator ind, Bar bar, ATR atrForScaling, ApplicationProperties props) {
         final double v = ind.value();
         if (Double.isNaN(v)) return 0.0;
 
@@ -68,7 +69,7 @@ final class SignalNormalizer {
             double atr = atrForScaling.value();
             if (Double.isNaN(atr) || atr == 0.0) return 0.0;
             // Normalize histogram by ATR, scale to about [-50,50]
-            double z = (hist / atr) * 50.0 * cfg.macdToAtrScale;
+            double z = (hist / atr) * 50.0 * props.getMacdToAtrScale();
             return clamp50(z);
         }
 

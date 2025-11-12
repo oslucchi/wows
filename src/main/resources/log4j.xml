@@ -1,14 +1,17 @@
 <?xml version="1.0" encoding="UTF-8" ?>
 <log4j:configuration>
 
-  <appender name="console" class="org.apache.log4j.ConsoleAppender">
+  <!-- Console appender -->
+  <appender name="CONSOLE" class="org.apache.log4j.ConsoleAppender">
     <param name="Target" value="System.out"/>
     <layout class="org.apache.log4j.PatternLayout">
+      <!-- Note: %M and %L are expensive; consider %c{1} if perf matters -->
       <param name="ConversionPattern" value="%d{HH:mm:ss.SSS} %-5p %M(%L)-%m%n"/>
     </layout>
   </appender>
 
-  <appender name="wows" class="org.apache.log4j.RollingFileAppender">
+  <!-- General app file -->
+  <appender name="WOWS" class="org.apache.log4j.RollingFileAppender">
     <param name="File" value="logs/wows.log"/>
     <param name="Append" value="true"/>
     <param name="ImmediateFlush" value="true"/>
@@ -19,10 +22,34 @@
     </layout>
   </appender>
 
+  <!-- GA-only file -->
+  <appender name="GA" class="org.apache.log4j.RollingFileAppender">
+    <param name="File" value="logs/ga.log"/>
+    <param name="Append" value="true"/>
+    <param name="ImmediateFlush" value="true"/>
+    <param name="MaxFileSize" value="10MB"/>
+    <param name="MaxBackupIndex" value="5"/>
+    <layout class="org.apache.log4j.PatternLayout">
+      <param name="ConversionPattern" value="%d{HH:mm:ss.SSS} %-5p %M(%L)-%m%n"/>
+    </layout>
+  </appender>
+
+  <!-- Root: DEBUG for everything, to CONSOLE + WOWS only -->
   <root>
     <priority value="DEBUG"/>
-    <appender-ref ref="console"/>
-    <appender-ref ref="wows"/>
+    <appender-ref ref="CONSOLE"/>
+    <appender-ref ref="WOWS"/>
+    <!-- IMPORTANT: do NOT reference GA here -->
   </root>
+
+  <!-- Package-specific logger: TRACE for it.l_soft.wows.ga -->
+  <logger name="it.l_soft.wows.ga">
+    <level value="TRACE"/>
+    <!-- Send GA logs to its own file and also to the console -->
+    <appender-ref ref="GA"/>
+    <appender-ref ref="CONSOLE"/>
+    <!-- Prevent bubbling to root (avoids duplication into WOWS) -->
+    <additivity value="false"/>
+  </logger>
 
 </log4j:configuration>

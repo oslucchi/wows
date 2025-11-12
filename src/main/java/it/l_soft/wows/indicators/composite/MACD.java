@@ -4,7 +4,7 @@ import java.util.function.ToDoubleFunction;
 
 import it.l_soft.wows.comms.Bar;
 import it.l_soft.wows.comms.Price;
-import it.l_soft.wows.indicators.Indicator;
+import it.l_soft.wows.indicators.AbstractIndicator;
 import it.l_soft.wows.indicators.trend.EMA;
 
 /**
@@ -24,7 +24,8 @@ import it.l_soft.wows.indicators.trend.EMA;
  *
  * Typical defaults: fast=12, slow=26, signal=9 on Price.CLOSE.
  */
-public final class MACD implements Indicator {
+public final class MACD extends AbstractIndicator {
+	
     private final EMA emaFast;
     private final EMA emaSlow;
     private final int signalPeriod;

@@ -4,7 +4,7 @@ import java.util.function.ToDoubleFunction;
 
 import it.l_soft.wows.comms.Bar;
 import it.l_soft.wows.comms.Price;
-import it.l_soft.wows.indicators.Indicator;
+import it.l_soft.wows.indicators.AbstractIndicator;
 
 /**
  * Streaming Simple Moving Average (SMA).
@@ -13,7 +13,7 @@ import it.l_soft.wows.indicators.Indicator;
  * - Until 'period' samples are collected, returns Double.NaN (NOT_DEFINED).
  * - O(1) per update; O(period) memory for the ring.
  */
-public final class SMA implements Indicator {
+public final class SMA extends AbstractIndicator {
     private int period = 0;
     private ToDoubleFunction<Bar> input = null;
 

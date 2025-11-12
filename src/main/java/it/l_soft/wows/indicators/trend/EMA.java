@@ -4,10 +4,10 @@ import java.util.function.ToDoubleFunction;
 
 import it.l_soft.wows.comms.Bar;
 import it.l_soft.wows.comms.Price;
-import it.l_soft.wows.indicators.Indicator;
+import it.l_soft.wows.indicators.AbstractIndicator;
 
 /** Streaming EMA: O(1) memory, single pass, no archives. */
-public final class EMA implements Indicator {
+public final class EMA extends AbstractIndicator {
 
     public static final double NOT_DEFINED = Double.NaN;
 

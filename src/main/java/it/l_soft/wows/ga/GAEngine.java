@@ -1,14 +1,17 @@
 package it.l_soft.wows.ga;
 
-import it.l_soft.wows.comms.Bar;
+import it.l_soft.wows.ApplicationProperties;
 import it.l_soft.wows.indicators.Indicator;
 import it.l_soft.wows.indicators.volatility.ATR;
 
 import java.util.*;
 import java.util.concurrent.ThreadLocalRandom;
 
+import org.apache.log4j.Logger;
+
 public final class GAEngine {
-    private final GAConfig cfg;
+	private final Logger log = Logger.getLogger(this.getClass());
+	ApplicationProperties props = ApplicationProperties.getInstance();
     private final List<Indicator> catalog; // all available indicator *prototypes* (NOT shared state!)
     private final List<Gene> population = new ArrayList<>();
 
@@ -18,90 +21,45 @@ public final class GAEngine {
     // For horizon scoring, keep a ring of past closes (or compute pct when horizon fulfilled)
     private final Deque<Double> closeRing = new ArrayDeque<>();
 
-    public GAEngine(GAConfig cfg, List<Indicator> indicatorCatalog) {
-        this.cfg = cfg;
+    public GAEngine(List<Indicator> indicatorCatalog) {
         this.catalog = indicatorCatalog;
-        this.atrScale = new ATR(cfg.atrPeriodForScaling);
+        this.atrScale = new ATR(props.getAtrPeriodForScaling());
         initPopulation();
     }
 
     private void initPopulation() {
         population.clear();
-        for (int i = 0; i < cfg.populationSize; i++) {
+        for (int i = 0; i < props.getPopulationSize(); i++) {
             population.add(randomGene());
         }
     }
 
     private Gene randomGene() {
+    	String geneIndicators = "";
         ThreadLocalRandom r = ThreadLocalRandom.current();
-        Indicator[] inds = new Indicator[cfg.geneSize];
-        for (int i = 0; i < cfg.geneSize; i++) {
-            // pick a random catalog member and clone it by reflection (fresh state)
-            Indicator proto = catalog.get(r.nextInt(catalog.size()));
-            inds[i] = cloneIndicator(proto);
+        int[] indIdx = new int[props.getGeneSize()];
+        for (int i = 0; i < props.getGeneSize(); i++) {
+        	// use the n-th indicator in the indicators list
+        	// theoretically an indicator could appear more than once in a gene
+        	indIdx[i] = r.nextInt(catalog.size());
+        	geneIndicators += catalog.get(indIdx[i]).getName() + " ";
         }
-        return new Gene(inds);
+        Gene g = new Gene(indIdx);
+        log.debug("Indicators selected for the current gene are: " + geneIndicators);
+        g.name = geneIndicators;
+        return g;
     }
-
-    // Shallow clone via no-arg/new matching constructor. If your indicators don’t have no-arg,
-    // consider keeping a Supplier<Indicator> factory alongside the catalog instead.
-    private Indicator cloneIndicator(Indicator proto) {
-        try {
-            return proto.getClass().getDeclaredConstructor().newInstance();
-        } catch (Exception e) {
-            throw new IllegalStateException("Indicator must have no-arg ctor for GA cloning: " + proto.getClass(), e);
-        }
-    }
-
-    /** Feed one bar into GA (and all genes). Returns whether an evolution step was performed. */
-    public boolean onBar(Bar bar) {
-        // 1) update shared ATR for normalization
-        atrScale.add(bar);
-
-        // 2) push close for horizon scoring
-        closeRing.addLast(bar.getClose());
-        if (closeRing.size() > cfg.horizonBars + 1) closeRing.removeFirst();
-
-        // 3) evaluate each gene on this bar
-        for (Gene g : population) {
-            g.barsSeen++;
-
-            double sum = 0.0;
-            for (Indicator ind : g.indicators) {
-                double s = ind.add(bar);
-                // s is raw; now normalize using shared ATR and current bar
-                double norm = SignalNormalizer.normalize(ind, bar, atrScale, cfg);
-                sum += norm;
-            }
-            // Decision made now, but we score it only when horizon closes.
-            // Store decision per gene temporarily in a field if you want.
-            // For simplicity we score when horizon data available:
-            if (closeRing.size() == cfg.horizonBars + 1) {
-                double c0 = closeRing.peekFirst();
-                double cH = closeRing.peekLast();
-                double pct = (cH - c0) / c0 * 100.0;
-
-                int delta = Scoring.score(Scoring.decide(sum), pct, cfg.holdThresholdPct);
-                g.score += delta;
-            }
-        }
-
-        // 4) Optional: early cull if a gene sinks below the current elite floor
-        if (cfg.earlyCullAtEliteFloor && shouldEvolveNow()) {
-            evolve();
-            return true;
-        }
-        return false;
-    }
-
+ 
+/*
     private boolean shouldEvolveNow() {
         // Example trigger: every 250 bars *and* every gene saw enough bars
         // You can wire a timer/iteration counter; here keep it simple:
-        return population.stream().allMatch(g -> g.barsSeen >= cfg.minBarsBeforeScoring);
+        return population.stream().allMatch(g -> g.warmedUp());
     }
-
+*/
+    
     public List<Gene> ranked() {
-        List<Gene> list = new ArrayList<>(population);
+        List<Gene> list = new ArrayList<Gene>(population);
         list.sort(Comparator.comparingInt((Gene g) -> g.score).reversed());
         return list;
     }
@@ -110,15 +68,14 @@ public final class GAEngine {
     public void evolve() {
         List<Gene> rank = ranked();
         int n = rank.size();
-        int keep = (int) Math.round(n * cfg.elitePct);
-        int cross= (int) Math.round(n * cfg.crossoverPct);
-        int repl = n - keep - cross;
+        int keep = (int) Math.round(n * props.getElitePct());
+        int cross= (int) Math.round(n * props.getCrossoverPct());
 
-        List<Gene> next = new ArrayList<>(n);
+        List<Gene> next = new ArrayList<Gene>(n);
 
         // 1) Elites
         for (int i = 0; i < keep; i++) {
-            next.add(rank.get(i).copyShallow());
+            next.add(rank.get(i));
         }
 
         ThreadLocalRandom rnd = ThreadLocalRandom.current();
@@ -156,20 +113,20 @@ public final class GAEngine {
     }
 
     private Gene crossover(Gene a, Gene b, ThreadLocalRandom rnd) {
-        Indicator[] child = new Indicator[cfg.geneSize];
-        int cut = rnd.nextInt(cfg.geneSize); // single-point
-        for (int i = 0; i < cfg.geneSize; i++) {
-            Indicator proto = (i < cut ? a.indicators[i] : b.indicators[i]);
-            child[i] = cloneIndicator(proto);
+        int[] child = new int[props.getGeneSize()];
+        int cut = rnd.nextInt(props.getGeneSize()); // single-point
+        for (int i = 0; i < props.getGeneSize(); i++) {
+            int proto = (i < cut ? a.indicatorsIndex[i] : b.indicatorsIndex[i]);
+            child[i] = proto;
         }
         return new Gene(child);
     }
 
     private void mutate(Gene g, ThreadLocalRandom rnd) {
-        if (rnd.nextDouble() > cfg.mutationRate) return;
-
+        if (rnd.nextDouble() > props.getMutationRate()) return;
+/*
         // swap two loci sometimes
-        if (rnd.nextDouble() < cfg.mutationSwapRate && g.indicators.length >= 2) {
+        if (rnd.nextDouble() < props.getMutationSwapRate() && g.indicators.length >= 2) {
             int i = rnd.nextInt(g.indicators.length);
             int j = rnd.nextInt(g.indicators.length);
             Indicator tmp = g.indicators[i]; g.indicators[i] = g.indicators[j]; g.indicators[j] = tmp;
@@ -179,9 +136,15 @@ public final class GAEngine {
             Indicator proto = catalog.get(rnd.nextInt(catalog.size()));
             g.indicators[pos] = cloneIndicator(proto);
         }
+*/
     }
 
     private void resetIndicators(Gene g) {
-        for (Indicator ind : g.indicators) ind.reset();
+//        for (Indicator ind : g.indicators) ind.reset();
+    }
+    
+    
+    public List<Gene> getPopulation() {
+    	return population;
     }
 }
