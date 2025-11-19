@@ -1,41 +1,49 @@
 package it.l_soft.wows.dataHandlers;
 
 import java.util.Iterator;
+import java.util.NoSuchElementException;
 import java.util.concurrent.atomic.AtomicLong;
 
-import it.l_soft.wows.comms.MarketBar;
+/**
+ * Lock-free, single-writer ring buffer with a fail-fast, zero-copy view.
+ */
+public class BarsStorage<T> {
 
-public class BarsStorage<marketBars>  {
-	
-	private class StoredBar {
-		public MarketBar bar;
-		public long version;
-		
-		public StoredBar(MarketBar bar, long version) {
-			this.bar = bar;
-			this.version = version;
-		}
-	}
+    // What we really store in the ring buffer
+    private static final class StoredItem<T> {
+        final T value;
+        final long version;
 
-    private final StoredBar[] marketBars;
+        StoredItem(T value, long version) {
+            this.value = value;
+            this.version = version;
+        }
+    }
+
+    private final StoredItem<T>[] buffer;
     private final int cap;
     private volatile int head = 0;
     private volatile int size = 0;
-    private final AtomicLong writes = new AtomicLong(0); // version
+    private final AtomicLong writes = new AtomicLong(0); // global version
 
+    @SuppressWarnings("unchecked")
     public BarsStorage(int capacity) {
+        if (capacity <= 0) {
+            throw new IllegalArgumentException("capacity must be > 0");
+        }
         this.cap = capacity;
-        this.marketBars = new StoredBar[capacity];
+        this.buffer = (StoredItem<T>[]) new StoredItem[capacity]; // ✅ real array
     }
 
-	    // single writer
-    public void add(MarketBar marketBar) {
-    	marketBars[head] = new StoredBar(marketBar, writes.getAndIncrement());              // plain ref write
+    /** Single writer */
+    public void add(T item) {
+        long v = writes.incrementAndGet();                  // bump version
+        buffer[head] = new StoredItem<>(item, v);           // write slot
         head = (head + 1) % cap;
-	    if (size < cap) size++;
+        if (size < cap) size++;
     }
 
-    /** A stable, zero-copy view; fails fast if overwritten during iteration. */
+    /** A stable, zero-copy view; fails fast if buffer is modified during iteration. */
     public View view() {
         long v = writes.get();
         int h = head;
@@ -44,32 +52,49 @@ public class BarsStorage<marketBars>  {
         return new View(start, s, v);
     }
 
+    /** Iterable view over the current contents. */
     public final class View implements Iterable<T> {
         private final int start, len;
         private final long version;
 
         private View(int start, int len, long version) {
-            this.start = start; this.len = len; this.version = version;
+            this.start = start;
+            this.len = len;
+            this.version = version;
         }
 
         @Override
         public Iterator<T> iterator() {
-            // Optional: verify before iteration
-            if (writes.get() != version) throw new IllegalStateException("Stale view");
+            // Optional: verify view is still valid before iteration
+            if (writes.get() != version) {
+                throw new IllegalStateException("Stale view");
+            }
+
             return new Iterator<T>() {
                 int i = 0;
-                @Override public boolean hasNext() {
-                    if (writes.get() != version) throw new IllegalStateException("Stale view");
+
+                @Override
+                public boolean hasNext() {
+                    if (writes.get() != version) {
+                        throw new IllegalStateException("Stale view");
+                    }
                     return i < len;
                 }
-                @SuppressWarnings("unchecked")
-                @Override public T next() {
-                    if (!hasNext()) throw new NoSuchElementException();
+
+                @Override
+                public T next() {
+                    if (!hasNext()) {
+                        throw new NoSuchElementException();
+                    }
                     int idx = (start + i++) % cap;
-                    return (T) buf[idx];
+                    StoredItem<T> slot = buffer[idx];
+                    if (slot == null) {
+                        // Should not happen if size/head are managed correctly
+                        throw new IllegalStateException("Uninitialized slot");
+                    }
+                    return slot.value;
                 }
             };
         }
     }
-
 }

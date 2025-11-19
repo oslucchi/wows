@@ -1,72 +1,71 @@
 package it.l_soft.wows.ga;
 
-import java.util.Arrays;
+import it.l_soft.wows.indicators.IndicatorContext;
 
-import org.apache.log4j.Logger;
+public final class Gene implements GeneInterface {
+    private static final double SIGNAL_MAX_ABS = 50.0;
 
-import it.l_soft.wows.ApplicationProperties;
+    private final String name;
+    private final int[] indicatorIndices;
+    private final double[] weights;
+    private double score;
 
-public final class Gene {
-	private final Logger log = Logger.getLogger(this.getClass());
+    public Gene(String name, int[] indicatorIndices, double[] weights) {
+        this.name = name;
+        this.indicatorIndices = indicatorIndices;
+        this.weights = weights;
+    }
 
-	ApplicationProperties props = ApplicationProperties.getInstance();
-	private final class PredictionScore {
-		public int nextBarPrediction = 0;
-		public int score = 0;
-		
-	}
-    public final int[] indicatorsIndex; // chosen by index into your master list
-    public int barsSeen = 0;
-    private int howManyScoresRecorded = 0;
-	public String name = "";
-
-    // online score accumulator
-    public int score = 0;
-    public PredictionScore[] predictionHistory;
-
-    public Gene(int[] indicatorsIndex) {
-        this.indicatorsIndex = indicatorsIndex;
-        this.predictionHistory = new PredictionScore[props.getValidScoreHistoryLength()];
-        for(int i = 0; i < props.getValidScoreHistoryLength(); i++)
-        {
-    		predictionHistory[i] = new PredictionScore();
+    /** Raw gene signal as weighted sum of normalized indicators, clamped to [-50, 50]. */
+    @Override
+    public double computeSignal(int t, IndicatorContext ctx) {
+        double sum = 0.0;
+        for (int i = 0; i < indicatorIndices.length; i++) {
+            double x = ctx.getNormalizedIndicator(indicatorIndices[i], t);
+            sum += weights[i] * x;
         }
+        return clamp50(sum);
     }
 
-    public Gene copyShallow() {
-        return new Gene(Arrays.copyOf(indicatorsIndex, indicatorsIndex.length));
+    /**
+     * Prediction of normalized market move, on the SAME SCALE as marketMoveNorm: [-1, 1].
+     * This is what you compare against marketMoveNorm.
+     */
+    public double computePredictedMoveNorm(int t, IndicatorContext ctx) {
+        double raw = computeSignal(t, ctx);       // [-50, 50]
+        double scaled = raw / SIGNAL_MAX_ABS;     // [-1, 1] if raw fully spans ±50
+        return clamp1(scaled);
     }
-    
-    // The prediction score a is an array ring.
-    // The new score is always added on the virtual head.
-    // the sum of the scores tells us the lass x bars behaviour of this gene
-    public void addScore(int marketMove, int prediction)
-    {
-    	barsSeen++;
-    	if (!warmedUp()) return;
-    	
-    	PredictionScore item = predictionHistory[howManyScoresRecorded];
-    	log.trace(name + ": previous gene's score value " + this.score);
-    	this.score -= item.score;
-    	log.trace("current bar prediction " + item.nextBarPrediction + 
-    			  " vs marketMove: " + marketMove);
-    	item.score = Math.abs(item.nextBarPrediction + marketMove);
-    	if ((marketMove != 0) && 
-    		(Math.signum(item.nextBarPrediction) != Math.signum(marketMove)))
-    	{
-    		item.score *= -1;
-    	}
-    	log.trace("current bar score " + item.score);
-    	this.score += item.score;
-    	log.trace("current gene's score value " + this.score);
-    	++howManyScoresRecorded;
-    	// move to next item and set the predicted value
-    	howManyScoresRecorded = howManyScoresRecorded % props.getValidScoreHistoryLength();
-    	predictionHistory[howManyScoresRecorded].nextBarPrediction = prediction;
+
+    private static double clamp50(double x) {
+        if (x >  SIGNAL_MAX_ABS) return  SIGNAL_MAX_ABS;
+        if (x < -SIGNAL_MAX_ABS) return -SIGNAL_MAX_ABS;
+        return x;
     }
-    
-    public boolean warmedUp()
-    {
-    	return (barsSeen > props.getMinBarsBeforeScoring());
+
+    private static double clamp1(double x) {
+        if (x >  1.0) return  1.0;
+        if (x < -1.0) return -1.0;
+        return x;
+    }
+
+    public String getName() {
+        return name;
+    }
+
+    public int[] getIndicatorIndices() {
+        return indicatorIndices;
+    }
+
+    public double[] getWeights() {
+        return weights;
+    }
+
+    public double getScore() {
+        return score;
+    }
+
+    public void setScore(double score) {
+        this.score = score;
     }
 }

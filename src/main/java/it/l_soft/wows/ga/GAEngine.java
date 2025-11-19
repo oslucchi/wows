@@ -44,9 +44,8 @@ public final class GAEngine {
         	indIdx[i] = r.nextInt(catalog.size());
         	geneIndicators += catalog.get(indIdx[i]).getName() + " ";
         }
-        Gene g = new Gene(indIdx);
-        log.debug("Indicators selected for the current gene are: " + geneIndicators);
-        g.name = geneIndicators;
+        Gene g = new Gene(geneIndicators, indIdx, null);
+        log.debug("Indicators selected for the current gene are: " + g.getName());
         return g;
     }
  
@@ -60,7 +59,7 @@ public final class GAEngine {
     
     public List<Gene> ranked() {
         List<Gene> list = new ArrayList<Gene>(population);
-        list.sort(Comparator.comparingInt((Gene g) -> g.score).reversed());
+        list.sort(Comparator.comparingDouble((Gene g) -> g.getScore()).reversed());
         return list;
     }
 
@@ -82,11 +81,12 @@ public final class GAEngine {
 
         // 2) Crossover (produce 'cross' children)
         while (next.size() < keep + cross) {
-            Gene p1 = tournament(rank, 4, rnd);
-            Gene p2 = tournament(rank, 4, rnd);
-            Gene child = crossover(p1, p2, rnd);
+        	Gene p1 = tournament(rank, 4, rnd);
+        	Gene p2 = tournament(rank, 4, rnd);
+        	Gene child = crossover(p1, p2, rnd);
             mutate(child, rnd);
-            child.score = 0; child.barsSeen = 0; // reset
+            child.setScore(0);
+            // child.barsSeen = 0; // reset
             resetIndicators(child);
             next.add(child);
         }
@@ -104,43 +104,34 @@ public final class GAEngine {
     }
 
     private Gene tournament(List<Gene> rank, int k, ThreadLocalRandom rnd) {
-        Gene best = null;
+    	Gene best = null;
         for (int i = 0; i < k; i++) {
-            Gene g = rank.get(rnd.nextInt(rank.size()));
-            if (best == null || g.score > best.score) best = g;
+        	Gene g = rank.get(rnd.nextInt(rank.size()));
+            if (best == null || g.getScore() > best.getScore()) best = g;
         }
         return best;
     }
 
     private Gene crossover(Gene a, Gene b, ThreadLocalRandom rnd) {
         int[] child = new int[props.getGeneSize()];
+        double[] weigths = new double[props.getGeneSize()];
         int cut = rnd.nextInt(props.getGeneSize()); // single-point
+        String geneName = "";
         for (int i = 0; i < props.getGeneSize(); i++) {
-            int proto = (i < cut ? a.indicatorsIndex[i] : b.indicatorsIndex[i]);
+            int proto = (i < cut ? a.getIndicatorIndices()[i] : b.getIndicatorIndices()[i]);
             child[i] = proto;
+            geneName += catalog.get(proto).getName() + " ";
         }
-        return new Gene(child);
+        return new Gene(geneName, child, weigths);
     }
 
     private void mutate(Gene g, ThreadLocalRandom rnd) {
         if (rnd.nextDouble() > props.getMutationRate()) return;
-/*
-        // swap two loci sometimes
-        if (rnd.nextDouble() < props.getMutationSwapRate() && g.indicators.length >= 2) {
-            int i = rnd.nextInt(g.indicators.length);
-            int j = rnd.nextInt(g.indicators.length);
-            Indicator tmp = g.indicators[i]; g.indicators[i] = g.indicators[j]; g.indicators[j] = tmp;
-        } else {
-            // replace one locus with a random indicator from the catalog
-            int pos = rnd.nextInt(g.indicators.length);
-            Indicator proto = catalog.get(rnd.nextInt(catalog.size()));
-            g.indicators[pos] = cloneIndicator(proto);
-        }
-*/
+        ;
     }
 
     private void resetIndicators(Gene g) {
-//        for (Indicator ind : g.indicators) ind.reset();
+    	;
     }
     
     

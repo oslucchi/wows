@@ -44,7 +44,7 @@
 
   <!-- Package-specific logger: TRACE for it.l_soft.wows.ga -->
   <logger name="it.l_soft.wows.ga">
-    <level value="TRACE"/>
+    <level value="DEBUG"/>
     <!-- Send GA logs to its own file and also to the console -->
     <appender-ref ref="GA"/>
     <appender-ref ref="CONSOLE"/>

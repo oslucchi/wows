@@ -44,7 +44,11 @@ public class ApplicationProperties {
     private Price defaultPrice = Price.CLOSE;  // for trend comparators, etc.
     private int validScoreHistoryLength = 100; // number of backward bars to consider for ranking
     
-
+    private double predictionTemperature = 0.8; // tau for tanh smoothing
+    private double volNormK = 1.25;             // scaling factor for volatility normalization
+    private double scoreScale = 50.0;           // step score magnitude scaling
+    private double atrNormScale = 25.0;
+    
 //	private int SMACrossing_ShortWindow = 50;
 //	private int SMACrossing_LongWindow = 200;
 //	
@@ -282,7 +286,27 @@ public class ApplicationProperties {
 	        	validScoreHistoryLength = Integer.parseInt(properties.getProperty(variable).trim());
 	        }
 	        
-	        //	        variable = "SMACrossing_ShortWindow";
+            variable = "predictionTemperature";
+            if (properties.getProperty(variable) != null) {
+                predictionTemperature = Double.parseDouble(properties.getProperty(variable).trim());
+            }
+
+            variable = "volNormK";
+            if (properties.getProperty(variable) != null) {
+                volNormK = Double.parseDouble(properties.getProperty(variable).trim());
+            }
+
+            variable = "scoreScale";
+            if (properties.getProperty(variable) != null) {
+                scoreScale = Double.parseDouble(properties.getProperty(variable).trim());
+            }
+            
+            variable = "atrNormScale";
+            if (properties.getProperty(variable) != null) {
+            	atrNormScale = Double.parseDouble(properties.getProperty(variable).trim());
+            }
+            
+//	        variable = "SMACrossing_ShortWindow";
 //	        if (properties.getProperty(variable) != null)
 //	        {
 //	        	SMACrossing_ShortWindow = Integer.parseInt(properties.getProperty(variable).trim());
@@ -585,6 +609,23 @@ public class ApplicationProperties {
 		return validScoreHistoryLength;
 	}
 	
+    public double getPredictionTemperature() {
+        return predictionTemperature;
+    }
+
+    public double getVolNormK() {
+        return volNormK;
+    }
+
+    public double getScoreScale() {
+        return scoreScale;
+    }
+
+	public double getAtrNormScale() {
+		return atrNormScale;
+	}
+    
+    
 //	public int getSMACrossing_ShortWindow() {
 //		return SMACrossing_ShortWindow;
 //	}

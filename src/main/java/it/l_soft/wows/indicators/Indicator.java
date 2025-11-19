@@ -2,7 +2,6 @@ package it.l_soft.wows.indicators;
 
 import it.l_soft.wows.ApplicationProperties;
 import it.l_soft.wows.comms.Bar;
-import it.l_soft.wows.ga.Decision;
 import it.l_soft.wows.indicators.bands.Bollinger;
 import it.l_soft.wows.indicators.bands.Donchian;
 import it.l_soft.wows.indicators.bands.Keltner;
@@ -35,12 +34,6 @@ public interface Indicator {
     
     default String getName() {
         return this.getClass().getSimpleName();
-    }
-        
-    default Decision decide(double sumSignal) {
-        if (sumSignal >  5.0) return Decision.LONG;   // small deadband around zero
-        if (sumSignal < -5.0) return Decision.SHORT;
-        return Decision.HOLD;
     }
 
     default double clamp50(double x) {
