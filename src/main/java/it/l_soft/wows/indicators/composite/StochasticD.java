@@ -27,6 +27,7 @@ public final class StochasticD extends AbstractIndicator {
         }
         // Wrap %K into a tiny Bar-like adapter so Sma can consume it
         Bar kBar = new Bar() {
+            public long getBarNumber()  { return 0L; }
             public double getOpen()  { return kVal; }
             public double getHigh()  { return kVal; }
             public double getLow()   { return kVal; }

@@ -4,19 +4,20 @@ import java.io.*;
 import java.net.*;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
-import java.text.SimpleDateFormat;
 import java.util.Arrays;
-import java.util.Date;
 import java.util.List;
 
 import org.apache.log4j.Logger;
 
 import it.l_soft.wows.ApplicationProperties;
 import it.l_soft.wows.ga.GAEngine;
-import it.l_soft.wows.ga.Gene;
+import it.l_soft.wows.ga.Gene.ScoreHolder;
 import it.l_soft.wows.indicators.Indicator;
 import it.l_soft.wows.indicators.volatility.ATR;
 import it.l_soft.wows.utils.JSONWrapper;
+import it.l_soft.wows.utils.RingBuffer;
+import it.l_soft.wows.utils.RingBuffer.MissedItemsException;
+import it.l_soft.wows.utils.TextFileHandler;
 import it.l_soft.wows.utils.Utilities;
 
 public class TradingStationInterface extends Thread {
@@ -28,15 +29,12 @@ public class TradingStationInterface extends Thread {
     Socket socket = null;
     List<Indicator> indicators;
     GAEngine ga;
+    RingBuffer<MarketBar> barSeries = new RingBuffer<MarketBar>(props.getBarsInMemory());
+    RingBuffer<MarketBar>.ConsumerHandle barsReader = barSeries.createConsumer();
     MarketBar prevBar = null;
     MarketBar currBar = null;
     ATR atrRef = null;
-
-    // CSV writer
-    private BufferedWriter csv;
-    private boolean csvHeaderWritten = false;
-    private File csvFile;
-
+    TextFileHandler csv;
     boolean shutdown = false;
 
     public TradingStationInterface(List<Indicator> indicators) {
@@ -55,7 +53,14 @@ public class TradingStationInterface extends Thread {
         }
 
         // Prepare CSV
-        initCsv();
+        try {
+			csv = new TextFileHandler(props.getCSVFilePath(), props.getCSVPreamble(), "csv");
+		} catch (Exception e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
+        // Write CSV header lazily (we need GA population for columns)
+        writeCsvHeaderIfNeeded(props.getVolNormK());
     }
 
     public TradingStationInterface() { }
@@ -64,63 +69,11 @@ public class TradingStationInterface extends Thread {
 
     public void closeSocket() {
         try {
-            if (csv != null) {
-                csv.flush();
-                csv.close();
-                log.info("CSV closed: " + (csvFile != null ? csvFile.getAbsolutePath() : ""));
-            }
-        } catch (IOException e) {
-            log.error("Error closing CSV", e);
-        }
-        try {
             if (socket != null) socket.close();
         } catch (IOException e) {
             log.error("Error closing socket", e);
         }
-    }
-
-    private void initCsv() {
-        try {
-            String dir = props.getCSVFilePath();
-            String pre = props.getCSVPreamble();
-            String ts  = new SimpleDateFormat("yyyyMMdd_HHmmss").format(new Date());
-            csvFile = new File(dir, pre + "genes_stream_" + ts + ".csv");
-            csvFile.getParentFile().mkdirs();
-            csv = new BufferedWriter(new FileWriter(csvFile, false));
-            log.info("CSV opened at: " + csvFile.getAbsolutePath());
-        } catch (Exception e) {
-            log.error("Unable to open CSV for writing", e);
-            csv = null;
-        }
-    }
-
-    private void writeCsvHeaderIfNeeded(double K_VOL) {
-        if (csv == null || csvHeaderWritten) return;
-        try {
-            StringBuilder sb = new StringBuilder();
-            // Core bar fields
-            sb.append("barNumber,timestamp,open,high,low,close,ret,atrAbs,atrPct,K_VOL,moveNorm");
-            // For each gene, add columns
-            for (Gene g : ga.getPopulation()) {
-                String gn = safe(g.getName());
-                sb.append(",").append(gn).append("_yPrev");
-                sb.append(",").append(gn).append("_yNow");
-                sb.append(",").append(gn).append("_step");
-                sb.append(",").append(gn).append("_total");
-            }
-            csv.write(sb.toString());
-            csv.newLine();
-            csv.flush();
-            csvHeaderWritten = true;
-        } catch (IOException e) {
-            log.error("Error writing CSV header", e);
-        }
-    }
-
-    private static String safe(String s) {
-        if (s == null) return "gene";
-        // replace commas and spaces to keep CSV clean
-        return s.replace(",", "_").replace(" ", "_");
+        csv.close();
     }
 
     public Message readMessageFromSocket() {
@@ -191,11 +144,22 @@ public class TradingStationInterface extends Thread {
                 case "B":
                     log.trace("The message is a market bar.");
                     currBar = (MarketBar) message;
-                    log.debug("New bar received: Open " + currBar.getOpen() +
-                              " High " + currBar.getHigh() +
-                              " Low " + currBar.getLow() +
-                              " Close " + currBar.getClose());
-
+                    currBar.setBarNumber(barNumber);
+					prevBar = null;
+                    try {
+						if (barSeries.getLength() > 0)
+							prevBar = barsReader.poll().getValue();
+					} 
+                    catch (MissedItemsException e) {
+						// TODO Auto-generated catch block
+						e.printStackTrace();
+					}
+                    log.debug("New bar received: BarNumber " + barNumber +
+                              " Close " + currBar.getClose() +
+                              " Prev " + (prevBar != null ? prevBar.getClose() : "N/A"));
+                    
+                    barSeries.publish(currBar);
+                    
                     // --- 1) Update indicators (ensure ATR is updated first for scaling) ---
                     if (atrRef != null) {
                         atrRef.add(currBar);
@@ -208,61 +172,31 @@ public class TradingStationInterface extends Thread {
                         log.trace("Indicator: " + indicator.getClass().getSimpleName() +
                                   ", normalizedValue: " + indicator.getNormalizedValue());
                     }
-
-                    if (prevBar != null) {
-                        // Read configurable params
-                        final double TAU = props.getPredictionTemperature();
-                        final double K_VOL = props.getVolNormK();
-
-                        // --- 2) Realized market move (vol-normalized to [-1,1]) ---
-                        double ret = (currBar.getClose() - prevBar.getClose()) / prevBar.getClose();
-                        double atrAbs = (atrRef != null) ? atrRef.value() : Double.NaN;
-                        double atrPct = (!Double.isNaN(atrAbs) && prevBar.getClose() != 0.0)
-                                ? (atrAbs / prevBar.getClose())
-                                : 0.0;
-                        double denom = Math.max(1e-9, K_VOL * Math.max(1e-9, atrPct));
-                        double marketMoveNorm = Math.max(-1.0, Math.min(1.0, ret / denom));
-
-                        // Write CSV header lazily (we need GA population for columns)
-                        writeCsvHeaderIfNeeded(K_VOL);
-
-                        if (log.isDebugEnabled()) {
-                            log.debug(String.format(
-                                "[BAR %d] ts=%d close_prev=%.6f close=%.6f ret=%.6f atrAbs=%.6f atrPct=%.6f K=%.3f moveNorm=%.4f",
-                                barNumber,
-                                currBar.getTimestamp(),
-                                prevBar.getClose(), currBar.getClose(),
-                                ret, atrAbs, atrPct, K_VOL, marketMoveNorm
-                            ));
-                        }
-
-                        // --- 3) For each gene: build composite yhat in [-1,1] and score ---
-                        for (Gene g : ga.getPopulation()) {
-                            double z = 0.0;
-                            for (int i : g.getIndicatorIndices()) {
-                                // each indicator normalized to [-50,50] → divide by 50 → [-1,1]
-                                z += indicators.get(i).getNormalizedValue() / 50.0;
-                            }
-                            z /= Math.max(1, g.getIndicatorIndices().length); // average
-                            double yhat = Math.tanh(z / TAU);
-                            int composite50 = (int) Math.round(50.0 * yhat);
-                            
-                            double diff = yhat - marketMoveNorm;      // signed error
-//                            double absDiff = Math.abs(diff);  // absolute error
-                            double sqDiff  = diff * diff;     // squared error (for MSE)
-                            g.setScore(sqDiff);
-                            if (log.isTraceEnabled()) {
-                                log.trace(String.format("[BAR %d][GENE %s] z=%.4f yhat=%.4f comp=%d",
-                                    barNumber, g.getName(), z, yhat, composite50));
-                            }
-                        }
-
-                        // --- 4) Append one CSV line for this bar ---
-                        appendCsvLine(barNumber, currBar, ret, atrAbs, atrPct, K_VOL, marketMoveNorm);
+                    
+                    if (currBar.getBarNumber() == 0)
+                    {
+                    	barNumber++;
+                    	// nothing could be done on the very first bar
+                    	break;
                     }
+                    
+                    // -- 2) calculate normalized values for the market move
+                    double ret = (currBar.getClose() - prevBar.getClose()) / prevBar.getClose();
+                    double atrAbs = (atrRef != null) ? atrRef.value() : Double.NaN;
+                    double atrPct = (!Double.isNaN(atrAbs) && prevBar.getClose() != 0.0) ? (atrAbs / prevBar.getClose()) : 0.0;
+                    double denom = Math.max(1e-9, props.getVolNormK() * Math.max(1e-9, atrPct));
+                    double marketMoveNorm = Math.max(-1.0, Math.min(1.0, ret / denom));                    
+                    
+                    // --- 3) For each gene: build composite yhat in [-1,1] and eval prediction
+                    ga.evalPopulation(indicators, currBar, prevBar, denom);
+	                                        
+                    // --- 5) Append one CSV line for this bar ---
+                    if (prevBar != null)
+                    {
+	                    appendCsvLine(barNumber, prevBar, ret, atrAbs, atrPct, props.getVolNormK(), marketMoveNorm);
+                    }
+                    ga.evolve(); // re-enable when you decide the cadence
 
-                    prevBar = currBar;
-                    // ga.evolve(); // re-enable when you decide the cadence
                     barNumber++;
                     break;
 
@@ -272,6 +206,30 @@ public class TradingStationInterface extends Thread {
                     trade.setTimestamp(0);
                     break;
             }
+        }
+    }
+    
+    private void writeCsvHeaderIfNeeded(double K_VOL) {
+        if (csv == null) return;
+        try {
+            StringBuilder sb = new StringBuilder();
+            // Core bar fields
+            sb.append("barNumber,timestamp,open,high,low,close,ret,atrAbs,atrPct,K_VOL,moveNorm");
+            // For each gene, add columns
+            sb.append(",").append("name");
+            sb.append(",").append("ts");
+            sb.append(",").append("predicted");
+            sb.append(",").append("dir");
+            sb.append(",").append("#win");
+            sb.append(",").append("#Lwin");
+            sb.append(",").append("TLong");
+            sb.append(",").append("#Swin");
+            sb.append(",").append("TShort");
+            sb.append(",").append("score");
+            csv.write(sb.toString(), true);
+        } 
+        catch (Exception e) {
+            log.error("Error writing CSV header", e);
         }
     }
 
@@ -293,15 +251,31 @@ public class TradingStationInterface extends Thread {
               .append(fmt(K_VOL)).append(',')
               .append(fmt(moveNorm));
 
-            // Gene fields
-            for (Gene g : ga.getPopulation()) {
-                sb.append(',').append(fmt(g.getScore()));
-            }
+	    	ScoreHolder prediction;
+			prediction = null;
+			if ((prevBar.getBarNumber() > 0) && 
+				(ga.getPredictor().getReader().getContentAsList().size() > 0))
+			{
+				prediction = (ScoreHolder) ga.getPredictor().getReader().getContentAsList().getLast();
+                sb.append(',').append(prediction.name);
+                sb.append(',').append(fmt(prediction.timestamp));
+                sb.append(',').append(fmt(prediction.predictedMarketPrice));
+                sb.append(',').append(fmt(prediction.direction));
+			}
+			else
+			{
+				sb.append(",,0,0,0");
+			}
+            sb.append(',').append(fmt(ga.getPredictor().getWinAccumulator()));
+            sb.append(',').append(fmt(ga.getPredictor().getLongWin()));
+            sb.append(',').append(fmt(ga.getPredictor().getTotalLong()));
+            sb.append(',').append(fmt(ga.getPredictor().getShortWin()));
+            sb.append(',').append(fmt(ga.getPredictor().getTotalShort()));
+            sb.append(',').append(fmt(ga.getPredictor().getTotalScore()));
 
-            csv.write(sb.toString());
-            csv.newLine();
-            csv.flush();
-        } catch (IOException e) {
+            csv.write(sb.toString(), true);
+        } 
+        catch (IOException e) {
             log.error("Error writing CSV line", e);
         }
     }

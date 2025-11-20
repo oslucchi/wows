@@ -116,6 +116,7 @@ public final class MACD extends AbstractIndicator {
     // --- tiny helper: wrap a scalar into a Bar so our EMA can consume it ---
     private static Bar scalarAsBar(double x) {
         return new Bar() {
+            @Override public long getBarNumber()  { return 0L; }
             @Override public double getOpen()  { return x; }
             @Override public double getHigh()  { return x; }
             @Override public double getLow()   { return x; }

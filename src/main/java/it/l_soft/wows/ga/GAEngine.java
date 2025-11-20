@@ -1,8 +1,12 @@
 package it.l_soft.wows.ga;
 
 import it.l_soft.wows.ApplicationProperties;
+import it.l_soft.wows.comms.MarketBar;
+import it.l_soft.wows.ga.Gene.ScoreHolder;
 import it.l_soft.wows.indicators.Indicator;
 import it.l_soft.wows.indicators.volatility.ATR;
+import it.l_soft.wows.utils.TextFileHandler;
+import it.l_soft.wows.utils.RingBuffer.MissedItemsException;
 
 import java.util.*;
 import java.util.concurrent.ThreadLocalRandom;
@@ -14,6 +18,9 @@ public final class GAEngine {
 	ApplicationProperties props = ApplicationProperties.getInstance();
     private final List<Indicator> catalog; // all available indicator *prototypes* (NOT shared state!)
     private final List<Gene> population = new ArrayList<>();
+    private TextFileHandler outGeneEvolution;
+    private Gene predictor = null;
+    private List<Gene> rank;
 
     // Shared ATR for normalization scaling
     private final ATR atrScale;
@@ -24,6 +31,13 @@ public final class GAEngine {
     public GAEngine(List<Indicator> indicatorCatalog) {
         this.catalog = indicatorCatalog;
         this.atrScale = new ATR(props.getAtrPeriodForScaling());
+        try {
+			this.outGeneEvolution = new TextFileHandler(props.getGeneEvolutionFilePath(), "GE", "txt");
+		} catch (Exception e) {
+			// TODO Auto-generated catch block
+			this.outGeneEvolution = null;
+			e.printStackTrace();
+		}
         initPopulation();
     }
 
@@ -38,14 +52,17 @@ public final class GAEngine {
     	String geneIndicators = "";
         ThreadLocalRandom r = ThreadLocalRandom.current();
         int[] indIdx = new int[props.getGeneSize()];
+        double[] weigths = new double[props.getGeneSize()];
+        
         for (int i = 0; i < props.getGeneSize(); i++) {
         	// use the n-th indicator in the indicators list
         	// theoretically an indicator could appear more than once in a gene
         	indIdx[i] = r.nextInt(catalog.size());
+        	weigths[i] = 1;
         	geneIndicators += catalog.get(indIdx[i]).getName() + " ";
         }
-        Gene g = new Gene(geneIndicators, indIdx, null);
-        log.debug("Indicators selected for the current gene are: " + g.getName());
+        Gene g = new Gene(geneIndicators, indIdx, weigths);
+//        log.debug("Indicators selected for the current gene are: " + g.getName());
         return g;
     }
  
@@ -56,16 +73,94 @@ public final class GAEngine {
         return population.stream().allMatch(g -> g.warmedUp());
     }
 */
+    private void geneEvalMaths(Gene g, List<Indicator> indicators, MarketBar currBar, 
+			   MarketBar prevBar, double denom)
+    {
+        double z = 0.0;
+        for (int i : g.getIndicatorIndices()) {
+            // each indicator normalized to [-50,50] → divide by 50 → [-1,1]
+            z += indicators.get(i).getNormalizedValue() / 50.0;
+        }
+        z /= Math.max(1, g.getIndicatorIndices().length); // average
+        double yhat = Math.tanh(z / props.getPredictionTemperature());
+		try {
+			g.evaluateScorePrediction(currBar, 
+									  (int)(Math.signum(currBar.getClose() - prevBar.getClose())),
+									  yhat,
+									  denom);
+		} catch (MissedItemsException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
+        log.trace(String.format("[BAR %d][GENE %s] z=%.4f yhat=%.4f", 
+				currBar.getBarNumber(), g.getName(), z, yhat));
+    }
+    
+    public void evalPopulation(List<Indicator> indicators, MarketBar currBar, 
+    						   MarketBar prevBar, double denom)
+    {
+    	// do the evaluation math on each gene
+    	for (Gene g : population) 
+        {
+        	geneEvalMaths(g, indicators, currBar, prevBar, denom);
+        }
+    	
+    	// do the math on the predictor
+    	if (predictor != null)
+    	{
+    		geneEvalMaths(predictor, indicators, currBar, prevBar, denom);
+    	}
+    	else
+    	{
+    		predictor = new Gene("", null, null);
+    	}
+
+    	// rank the population after evaluating their score
+    	rank = ranked();
+
+    	// Set the new prediction for predictor
+    	Gene firstInRank = rank.getFirst(); 
+    	ScoreHolder firstInRankScore;
+    	@SuppressWarnings("unchecked")
+		List<ScoreHolder> scoresAsList = firstInRank.getReader().getContentAsList();
+    	if ((scoresAsList != null) && (scoresAsList.size() > 0))
+    	{
+    		firstInRankScore = scoresAsList.getLast();
+    	}
+    	else
+    	{
+    		firstInRankScore = predictor.new ScoreHolder();
+    		firstInRankScore.timestamp = 0;
+    		firstInRankScore.direction = 0;
+    		firstInRankScore.predictedMarketPrice = 0;
+    	}
+        
+        ScoreHolder newPrediction = predictor.new ScoreHolder();
+        
+        predictor.setName(firstInRank.getName());
+        predictor.setIndicatorIndices(firstInRank.getIndicatorIndices());
+        newPrediction.name = predictor.getName();
+        newPrediction.timestamp = firstInRankScore.timestamp;
+        newPrediction.direction = firstInRankScore.direction;
+        newPrediction.predictedMarketPrice = firstInRankScore.predictedMarketPrice;
+        predictor.getScores().publish(newPrediction);
+    }
     
     public List<Gene> ranked() {
-        List<Gene> list = new ArrayList<Gene>(population);
-        list.sort(Comparator.comparingDouble((Gene g) -> g.getScore()).reversed());
-        return list;
+        final double TOTAL_WEIGHT = props.getWaitOfScoreInRanking();
+        final double WINRATE_WEIGHT = props.getWaitOfWinRateInRanking();
+        return population.stream()
+                .sorted(Comparator.comparingDouble((Gene g) -> {
+                    double totalScore = g.getTotalScore();
+                    double winRate = g.getWinRate(); // 0–1 range
+                    return totalScore * TOTAL_WEIGHT + winRate * WINRATE_WEIGHT;
+                }).reversed())
+                .toList();
     }
+
 
     /** Selection: top keep, middle crossover, bottom replaced. */
     public void evolve() {
-        List<Gene> rank = ranked();
         int n = rank.size();
         int keep = (int) Math.round(n * props.getElitePct());
         int cross= (int) Math.round(n * props.getCrossoverPct());
@@ -85,8 +180,6 @@ public final class GAEngine {
         	Gene p2 = tournament(rank, 4, rnd);
         	Gene child = crossover(p1, p2, rnd);
             mutate(child, rnd);
-            child.setScore(0);
-            // child.barsSeen = 0; // reset
             resetIndicators(child);
             next.add(child);
         }
@@ -101,13 +194,26 @@ public final class GAEngine {
         // Reset horizon buffer so we don’t mix pre/post evolution windows
         closeRing.clear();
         atrScale.reset();
+        try {
+        	String sep = "";
+	        for(Gene g : population)
+	        {
+		        outGeneEvolution.write(sep + g.getName(), false);
+		        sep = ",";
+	        }
+	        outGeneEvolution.write("", true);
+        }
+        catch(Exception e)
+        {
+        	;
+        }
     }
 
     private Gene tournament(List<Gene> rank, int k, ThreadLocalRandom rnd) {
     	Gene best = null;
         for (int i = 0; i < k; i++) {
         	Gene g = rank.get(rnd.nextInt(rank.size()));
-            if (best == null || g.getScore() > best.getScore()) best = g;
+            if (best == null || g.getTotalScore() > best.getTotalScore()) best = g;
         }
         return best;
     }
@@ -138,4 +244,16 @@ public final class GAEngine {
     public List<Gene> getPopulation() {
     	return population;
     }
+    
+    public void cleanUpOnExit() {
+    	outGeneEvolution.close();
+    }
+
+	public List<Gene>getRank() {
+		return rank;
+	}
+	
+	public Gene getPredictor() {
+		return predictor;
+	}
 }

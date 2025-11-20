@@ -22,6 +22,7 @@ public class ApplicationProperties {
 	private String host;
 	private long intraMessagePause;
 	private String CSVFilePath;
+	private String geneEvolutionFilePath;
 	private String CSVPreamble;
 	private boolean consoleOut;
 	private long shutdownGracePeriod;
@@ -49,6 +50,12 @@ public class ApplicationProperties {
     private double scoreScale = 50.0;           // step score magnitude scaling
     private double atrNormScale = 25.0;
     
+    private int barsInMemory = 1000;
+    private int genesWarmUpBars = 20;
+    
+    private double waitOfScoreInRanking = .65;
+    private double waitOfWinRateInRanking = .35;
+    		
 //	private int SMACrossing_ShortWindow = 50;
 //	private int SMACrossing_LongWindow = 200;
 //	
@@ -179,13 +186,19 @@ public class ApplicationProperties {
 	        	intraMessagePause = Long.parseLong(properties.getProperty(variable).trim());
 	        }
 	        
-			variable = "CSVFilePath";
+			variable = "geneEvolutionFilePath";
+	        if (properties.getProperty(variable) != null)
+	        {
+	        	setGeneEvolutionFilePath(properties.getProperty(variable).trim());
+	        }
+
+	        variable = "CSVFilePath";
 			CSVFilePath = "./output";
 	        if (properties.getProperty(variable) != null)
 	        {
 	        	CSVFilePath = properties.getProperty(variable).trim();
 	        }
-
+	        
 			variable = "CSVPreamble";
 			CSVPreamble = "wows_";
 	        if (properties.getProperty(variable) != null)
@@ -244,6 +257,17 @@ public class ApplicationProperties {
 	        if (properties.getProperty(variable) != null)
 	        {
 	        	atrPeriodForScaling = Integer.parseInt(properties.getProperty(variable).trim());
+	        }
+	    	variable = "genesWarmUpBars";
+	        if (properties.getProperty(variable) != null)
+	        {
+	        	setGenesWarmUpBars(Integer.parseInt(properties.getProperty(variable).trim()));
+	        }
+	        
+	    	variable = "barsInMemory";
+	        if (properties.getProperty(variable) != null)
+	        {
+	        	setBarsInMemory(Integer.parseInt(properties.getProperty(variable).trim()));
 	        }
 	    	variable = "holdThresholdPct";
 	        if (properties.getProperty(variable) != null)
@@ -306,6 +330,15 @@ public class ApplicationProperties {
             	atrNormScale = Double.parseDouble(properties.getProperty(variable).trim());
             }
             
+            variable = "waitOfScoreInRanking";
+            if (properties.getProperty(variable) != null) {
+            	setWaitOfScoreInRanking(Double.parseDouble(properties.getProperty(variable).trim()));
+            }
+            
+            variable = "waitOfWinRateInRanking";
+            if (properties.getProperty(variable) != null) {
+            	setWaitOfWinRateInRanking(Double.parseDouble(properties.getProperty(variable).trim()));
+            }
 //	        variable = "SMACrossing_ShortWindow";
 //	        if (properties.getProperty(variable) != null)
 //	        {
@@ -623,6 +656,46 @@ public class ApplicationProperties {
 
 	public double getAtrNormScale() {
 		return atrNormScale;
+	}
+
+	public int getBarsInMemory() {
+		return barsInMemory;
+	}
+
+	public void setBarsInMemory(int barsInMemory) {
+		this.barsInMemory = barsInMemory;
+	}
+
+	public int getGenesWarmUpBars() {
+		return genesWarmUpBars;
+	}
+
+	public void setGenesWarmUpBars(int genesWarmUpBars) {
+		this.genesWarmUpBars = genesWarmUpBars;
+	}
+
+	public double getWaitOfScoreInRanking() {
+		return waitOfScoreInRanking;
+	}
+
+	public void setWaitOfScoreInRanking(double waitOfScoreInRanking) {
+		this.waitOfScoreInRanking = waitOfScoreInRanking;
+	}
+
+	public double getWaitOfWinRateInRanking() {
+		return waitOfWinRateInRanking;
+	}
+
+	public void setWaitOfWinRateInRanking(double waitOfWinRateInRanking) {
+		this.waitOfWinRateInRanking = waitOfWinRateInRanking;
+	}
+
+	public String getGeneEvolutionFilePath() {
+		return geneEvolutionFilePath;
+	}
+
+	public void setGeneEvolutionFilePath(String geneEvolutionFilePath) {
+		this.geneEvolutionFilePath = geneEvolutionFilePath;
 	}
     
     
