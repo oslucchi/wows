@@ -66,6 +66,7 @@ public final class Gene implements GeneInterface {
     	if (scores.getLength() > 0) {
     		prediction = scoresReader.poll().getValue();
 
+    		// if we have at least one prediction, the last should be referred to the current bar
 			sb.append(String.format("%s,%s,%d,%s,%d,%d,%s,%d,%d,",
     								name, this.name, totalBarsSurviving,
     								sdf.format(new Date(prediction.timestamp)), prediction.barNumber, prediction.direction,
@@ -123,7 +124,7 @@ public final class Gene implements GeneInterface {
 
     	prediction = new ScoreHolder();
     	prediction.timestamp = currBar.getTimestamp();
-    	prediction.barNumber = currBar.getBarNumber();
+    	prediction.barNumber = currBar.getBarNumber() + 1;
 
     	// convert from normalized prediction back to real return
     	double predictedReturn = predictedMoveNorm * denom; // e.g. +/- 1 * 0.01 = +/-1%
@@ -145,7 +146,7 @@ public final class Gene implements GeneInterface {
 				// TODO Auto-generated catch block
 				e.printStackTrace();
 			}
-    		log.debug(sb.toString());
+//    		log.debug(sb.toString());
     	}
     	
     	this.scores.publish(prediction);
