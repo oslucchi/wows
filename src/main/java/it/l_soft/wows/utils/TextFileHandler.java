@@ -14,19 +14,36 @@ public class TextFileHandler {
 
     private File file;
     private BufferedWriter fileBufWriter;
-
+    String dir = "";
+    String pre = "";
+    String extension = "";
+    String ts  = new SimpleDateFormat("MMdd_HHmmss").format(new Date());
+    
     public TextFileHandler(String filePath, String preamble, String extension) 
     		throws Exception 
     {
     	
+    	this.dir = filePath;
+    	this.pre = preamble;
+    	this.extension = extension;
+    	open(true);
+    }
+    
+    public TextFileHandler(String filePath, String preamble, String extension, boolean useTimestamp) 
+    		throws Exception 
+    {
+    	
+    	this.dir = filePath;
+    	this.pre = preamble;
+    	this.extension = extension;
+    	open(useTimestamp);
+    }
+    public void open(boolean useTimestamp) throws Exception {
         try {
-            String dir = filePath;
-            String pre = preamble;
-            String ts  = new SimpleDateFormat("MMdd_HHmmss").format(new Date());
-            file = new File(dir, pre + "_" + ts + "." + extension);
+            file = new File(dir, pre + (useTimestamp ? "_" + ts : "") + "." + extension);
             file.getParentFile().mkdirs();
-            fileBufWriter = new BufferedWriter(new FileWriter(file, false));
-            log.info("CSV opened at: " + file.getAbsolutePath());
+            fileBufWriter = new BufferedWriter(new FileWriter(file, file.exists()));
+            log.trace("CSV opened at: " + file.getAbsolutePath());
         } 
         catch (Exception e) {
             log.error("Unable to open CSV for writing", e);
@@ -34,13 +51,13 @@ public class TextFileHandler {
             throw e;
         }
     }
-
+    
     public void close() {
         try {
             if (fileBufWriter != null) {
                 fileBufWriter.flush();
                 fileBufWriter.close();
-                log.info("CSV closed: " + (file != null ? file.getAbsolutePath() : ""));
+                log.trace("CSV closed: " + (file != null ? file.getAbsolutePath() : ""));
             }
         } catch (IOException e) {
             log.error("Error closing CSV", e);

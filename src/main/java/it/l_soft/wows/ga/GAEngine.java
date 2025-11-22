@@ -19,14 +19,14 @@ public final class GAEngine {
     private final List<Indicator> catalog; // all available indicator *prototypes* (NOT shared state!)
     private final List<Gene> population = new ArrayList<>();
     private TextFileHandler outGeneEvolution;
-    private Gene predictor = null;
+    private Gene arbitrator = null;
     private List<Gene> rank;
 
     // Shared ATR for normalization scaling
     private final ATR atrScale;
 
     // For horizon scoring, keep a ring of past closes (or compute pct when horizon fulfilled)
-    private final Deque<Double> closeRing = new ArrayDeque<>();
+//  private final Deque<Double> closeRing = new ArrayDeque<>();
 
     public GAEngine(List<Indicator> indicatorCatalog) {
         this.catalog = indicatorCatalog;
@@ -39,6 +39,16 @@ public final class GAEngine {
 			e.printStackTrace();
 		}
         initPopulation();
+        try {
+        	TextFileHandler temp = new TextFileHandler(props.getGeneEvalDumpPath(), props.getGeneEvalDumpName(), "csv", false);
+    		temp.write("Gene,Indicators,BarsSurvived,PredTS,PredBar#,PredDir,MktTS,MktBar#,MktDir," +
+ 				   	   "PrevClose,CurrClose,PredMktPrice,PredMove,Denom,BOH,PredUpdatedTS,PredScore," +
+ 				   	   "nextTS,nextBar#,nextPredPrice,nextDir", true);
+			temp.close();
+		} catch (Exception e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
     }
 
     private void initPopulation() {
@@ -62,19 +72,11 @@ public final class GAEngine {
         	geneIndicators += catalog.get(indIdx[i]).getName() + " ";
         }
         Gene g = new Gene(geneIndicators, indIdx, weigths);
-//        log.debug("Indicators selected for the current gene are: " + g.getName());
         return g;
     }
  
-/*
-    private boolean shouldEvolveNow() {
-        // Example trigger: every 250 bars *and* every gene saw enough bars
-        // You can wire a timer/iteration counter; here keep it simple:
-        return population.stream().allMatch(g -> g.warmedUp());
-    }
-*/
     private void geneEvalMaths(Gene g, List<Indicator> indicators, MarketBar currBar, 
-			   MarketBar prevBar, double denom)
+			   MarketBar prevBar, double denom, String name)
     {
         double z = 0.0;
         for (int i : g.getIndicatorIndices()) {
@@ -84,10 +86,11 @@ public final class GAEngine {
         z /= Math.max(1, g.getIndicatorIndices().length); // average
         double yhat = Math.tanh(z / props.getPredictionTemperature());
 		try {
-			g.evaluateScorePrediction(currBar, 
+			g.evaluateScorePrediction(currBar, prevBar,
 									  (int)(Math.signum(currBar.getClose() - prevBar.getClose())),
 									  yhat,
-									  denom);
+									  denom, 
+									  name);
 		} catch (MissedItemsException e) {
 			// TODO Auto-generated catch block
 			e.printStackTrace();
@@ -100,19 +103,20 @@ public final class GAEngine {
     						   MarketBar prevBar, double denom)
     {
     	// do the evaluation math on each gene
+    	int i = 0;
     	for (Gene g : population) 
         {
-        	geneEvalMaths(g, indicators, currBar, prevBar, denom);
+        	geneEvalMaths(g, indicators, currBar, prevBar, denom, "gene" + i++);
         }
     	
     	// do the math on the predictor
-    	if (predictor != null)
+    	if (arbitrator != null)
     	{
-    		geneEvalMaths(predictor, indicators, currBar, prevBar, denom);
+    		geneEvalMaths(arbitrator, indicators, currBar, prevBar, denom, "arbitrator");
     	}
     	else
     	{
-    		predictor = new Gene("", null, null);
+    		arbitrator = new Gene("", null, null);
     	}
 
     	// rank the population after evaluating their score
@@ -129,21 +133,21 @@ public final class GAEngine {
     	}
     	else
     	{
-    		firstInRankScore = predictor.new ScoreHolder();
+    		firstInRankScore = arbitrator.new ScoreHolder();
     		firstInRankScore.timestamp = 0;
     		firstInRankScore.direction = 0;
     		firstInRankScore.predictedMarketPrice = 0;
     	}
         
-        ScoreHolder newPrediction = predictor.new ScoreHolder();
+        ScoreHolder newPrediction = arbitrator.new ScoreHolder();
         
-        predictor.setName(firstInRank.getName());
-        predictor.setIndicatorIndices(firstInRank.getIndicatorIndices());
-        newPrediction.name = predictor.getName();
+        arbitrator.setName(firstInRank.getName());
+        arbitrator.setIndicatorIndices(firstInRank.getIndicatorIndices());
+        newPrediction.name = arbitrator.getName();
         newPrediction.timestamp = firstInRankScore.timestamp;
         newPrediction.direction = firstInRankScore.direction;
         newPrediction.predictedMarketPrice = firstInRankScore.predictedMarketPrice;
-        predictor.getScores().publish(newPrediction);
+        arbitrator.getScores().publish(newPrediction);
     }
     
     public List<Gene> ranked() {
@@ -151,8 +155,8 @@ public final class GAEngine {
         final double WINRATE_WEIGHT = props.getWaitOfWinRateInRanking();
         return population.stream()
                 .sorted(Comparator.comparingDouble((Gene g) -> {
-                    double totalScore = g.getTotalScore();
-                    double winRate = g.getWinRate(); // 0–1 range
+                    double totalScore = g.getTotalScore() / g.getTotalBarsSurviving();
+                    double winRate = g.getWinRate() / g.getTotalBarsSurviving();
                     return totalScore * TOTAL_WEIGHT + winRate * WINRATE_WEIGHT;
                 }).reversed())
                 .toList();
@@ -174,14 +178,14 @@ public final class GAEngine {
 
         ThreadLocalRandom rnd = ThreadLocalRandom.current();
 
-        // 2) Crossover (produce 'cross' children)
-        while (next.size() < keep + cross) {
-        	Gene p1 = tournament(rank, 4, rnd);
-        	Gene p2 = tournament(rank, 4, rnd);
-        	Gene child = crossover(p1, p2, rnd);
-            mutate(child, rnd);
-            resetIndicators(child);
-            next.add(child);
+        // 2) Crossover (produce 'crossed' children)
+        for (int i = keep; i < keep + cross; i += 2) {
+        	if (i + 1 > population.size()) break;
+        	Gene a = population.get(i);
+        	Gene b = population.get(i + 1);
+        	crossover(i, rnd);
+            next.add(a);
+            next.add(b);
         }
 
         // 3) Replacement (random new)
@@ -192,7 +196,6 @@ public final class GAEngine {
         population.clear();
         population.addAll(next);
         // Reset horizon buffer so we don’t mix pre/post evolution windows
-        closeRing.clear();
         atrScale.reset();
         try {
         	String sep = "";
@@ -209,37 +212,28 @@ public final class GAEngine {
         }
     }
 
-    private Gene tournament(List<Gene> rank, int k, ThreadLocalRandom rnd) {
-    	Gene best = null;
-        for (int i = 0; i < k; i++) {
-        	Gene g = rank.get(rnd.nextInt(rank.size()));
-            if (best == null || g.getTotalScore() > best.getTotalScore()) best = g;
+    private void crossover(int geneAIdx, ThreadLocalRandom rnd) {
+    	Gene a = population.get(geneAIdx);
+        Gene b = population.get(geneAIdx + 1);
+    	for (int i = 0; i < props.getGeneSize(); i++) {
+            if (rnd.nextInt(2) == 1)
+            {
+            	int k = a.getIndicatorIndices()[i];
+            	a.getIndicatorIndices()[i] = b.getIndicatorIndices()[i];
+            	b.getIndicatorIndices()[i] = k;
+            }
         }
-        return best;
-    }
-
-    private Gene crossover(Gene a, Gene b, ThreadLocalRandom rnd) {
-        int[] child = new int[props.getGeneSize()];
-        double[] weigths = new double[props.getGeneSize()];
-        int cut = rnd.nextInt(props.getGeneSize()); // single-point
-        String geneName = "";
+        String geneNameA = "";
+        String geneNameB = "";
         for (int i = 0; i < props.getGeneSize(); i++) {
-            int proto = (i < cut ? a.getIndicatorIndices()[i] : b.getIndicatorIndices()[i]);
-            child[i] = proto;
-            geneName += catalog.get(proto).getName() + " ";
+            geneNameA += catalog.get(a.getIndicatorIndices()[i]).getName() + " ";
+            geneNameB += catalog.get(b.getIndicatorIndices()[i]).getName() + " ";
         }
-        return new Gene(geneName, child, weigths);
-    }
-
-    private void mutate(Gene g, ThreadLocalRandom rnd) {
-        if (rnd.nextDouble() > props.getMutationRate()) return;
-        ;
-    }
-
-    private void resetIndicators(Gene g) {
-    	;
-    }
-    
+        a.setName(geneNameA);
+        a.resetIndicators();
+        b.setName(geneNameB);
+        b.resetIndicators();
+    }    
     
     public List<Gene> getPopulation() {
     	return population;
@@ -253,7 +247,7 @@ public final class GAEngine {
 		return rank;
 	}
 	
-	public Gene getPredictor() {
-		return predictor;
+	public Gene getArbitrator() {
+		return arbitrator;
 	}
 }

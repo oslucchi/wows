@@ -254,9 +254,9 @@ public class TradingStationInterface extends Thread {
 	    	ScoreHolder prediction;
 			prediction = null;
 			if ((prevBar.getBarNumber() > 0) && 
-				(ga.getPredictor().getReader().getContentAsList().size() > 0))
+				(ga.getArbitrator().getReader().getContentAsList().size() > 0))
 			{
-				prediction = (ScoreHolder) ga.getPredictor().getReader().getContentAsList().getLast();
+				prediction = (ScoreHolder) ga.getArbitrator().getReader().getContentAsList().getLast();
                 sb.append(',').append(prediction.name);
                 sb.append(',').append(fmt(prediction.timestamp));
                 sb.append(',').append(fmt(prediction.predictedMarketPrice));
@@ -266,12 +266,12 @@ public class TradingStationInterface extends Thread {
 			{
 				sb.append(",,0,0,0");
 			}
-            sb.append(',').append(fmt(ga.getPredictor().getWinAccumulator()));
-            sb.append(',').append(fmt(ga.getPredictor().getLongWin()));
-            sb.append(',').append(fmt(ga.getPredictor().getTotalLong()));
-            sb.append(',').append(fmt(ga.getPredictor().getShortWin()));
-            sb.append(',').append(fmt(ga.getPredictor().getTotalShort()));
-            sb.append(',').append(fmt(ga.getPredictor().getTotalScore()));
+            sb.append(',').append(fmt(ga.getArbitrator().getWinAccumulator()));
+            sb.append(',').append(fmt(ga.getArbitrator().getLongWin()));
+            sb.append(',').append(fmt(ga.getArbitrator().getTotalLong()));
+            sb.append(',').append(fmt(ga.getArbitrator().getShortWin()));
+            sb.append(',').append(fmt(ga.getArbitrator().getTotalShort()));
+            sb.append(',').append(fmt(ga.getArbitrator().getTotalScore()));
 
             csv.write(sb.toString(), true);
         } 

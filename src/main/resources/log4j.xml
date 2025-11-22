@@ -39,17 +39,16 @@
     <priority value="DEBUG"/>
     <appender-ref ref="CONSOLE"/>
     <appender-ref ref="WOWS"/>
-    <!-- IMPORTANT: do NOT reference GA here -->
   </root>
 
   <!-- Package-specific logger: TRACE for it.l_soft.wows.ga -->
+<!-- 
   <logger name="it.l_soft.wows.ga">
     <level value="DEBUG"/>
-    <!-- Send GA logs to its own file and also to the console -->
     <appender-ref ref="GA"/>
     <appender-ref ref="CONSOLE"/>
-    <!-- Prevent bubbling to root (avoids duplication into WOWS) -->
     <additivity value="false"/>
   </logger>
+ -->
 
 </log4j:configuration>

@@ -24,6 +24,8 @@ public class ApplicationProperties {
 	private String CSVFilePath;
 	private String geneEvolutionFilePath;
 	private String CSVPreamble;
+	private String geneEvalDumpPath;
+	private String geneEvalDumpName;
 	private boolean consoleOut;
 	private long shutdownGracePeriod;
 	private String indicatorsToInstantiate;
@@ -206,6 +208,18 @@ public class ApplicationProperties {
 	        	CSVPreamble = properties.getProperty(variable).trim();
 	        }
 	        
+			variable = "geneEvalDumpPath";
+	        if (properties.getProperty(variable) != null)
+	        {
+	        	geneEvalDumpPath = properties.getProperty(variable).trim();
+	        }
+	        
+			variable = "geneEvalDumpName";
+	        if (properties.getProperty(variable) != null)
+	        {
+	        	geneEvalDumpName = properties.getProperty(variable).trim();
+	        }
+
 	        variable = "consoleOut";
 	        if (properties.getProperty(variable) != null)
 	        {
@@ -696,6 +710,14 @@ public class ApplicationProperties {
 
 	public void setGeneEvolutionFilePath(String geneEvolutionFilePath) {
 		this.geneEvolutionFilePath = geneEvolutionFilePath;
+	}
+
+	public String getGeneEvalDumpPath() {
+		return geneEvalDumpPath;
+	}
+
+	public String getGeneEvalDumpName() {
+		return geneEvalDumpName;
 	}
     
     
