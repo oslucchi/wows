@@ -6,12 +6,26 @@ import it.l_soft.wows.indicators.bands.Bollinger;
 import it.l_soft.wows.indicators.bands.Donchian;
 import it.l_soft.wows.indicators.bands.Keltner;
 import it.l_soft.wows.indicators.composite.MACD;
+import it.l_soft.wows.indicators.composite.StochasticD;
+import it.l_soft.wows.indicators.momentum.AwesomeOscillator;
+import it.l_soft.wows.indicators.momentum.CCI;
+import it.l_soft.wows.indicators.momentum.CMO;
+import it.l_soft.wows.indicators.momentum.CoppockCurve;
+import it.l_soft.wows.indicators.momentum.DPO;
 import it.l_soft.wows.indicators.momentum.ROC;
 import it.l_soft.wows.indicators.momentum.RSI;
 import it.l_soft.wows.indicators.momentum.StochasticK;
+import it.l_soft.wows.indicators.momentum.TRIX;
+import it.l_soft.wows.indicators.momentum.WilliamsR;
+import it.l_soft.wows.indicators.trend.Aroon;
 import it.l_soft.wows.indicators.trend.EMA;
+import it.l_soft.wows.indicators.trend.KAMA;
 import it.l_soft.wows.indicators.trend.SMA;
+import it.l_soft.wows.indicators.trend.WMA;
 import it.l_soft.wows.indicators.volatility.ATR;
+import it.l_soft.wows.indicators.volatility.MassIndex;
+import it.l_soft.wows.indicators.volatility.UlcerIndex;
+import it.l_soft.wows.indicators.volume.MFI;
 
 public interface Indicator {
     double NOT_DEFINED = Double.NaN;
@@ -52,12 +66,25 @@ public interface Indicator {
      * Provide a shared ATR (atrForScaling) already fed each bar to stabilize scaling.
      */
     default double normalize(Bar bar, ATR atrForScaling, ApplicationProperties props) {
-    	final double v = this.value();
+        final double v = this.value();
         if (Double.isNaN(v)) return 0.0;
 
-        // BOUNDED oscillators (easy)
-        if (this instanceof RSI)          return v - 50.0;           // RSI in [0,100] → [-50,50]
-        if (this instanceof StochasticK)  return v - 50.0;           // %K in [0,100] → [-50,50]
+        // BOUNDED oscillators (easy, 0..100 → [-50,50])
+        if (this instanceof RSI)                  return v - 50.0;  // RSI in [0,100] → [-50,50]
+        if (this instanceof StochasticK ||
+            this instanceof StochasticD)          return v - 50.0;  // %K/%D in [0,100] → [-50,50]
+        if (this instanceof MFI)                  return v - 50.0;  // MFI in [0,100] → [-50,50]
+
+        // Williams %R in [-100,0] → [-50,50]
+        if (this instanceof WilliamsR) {
+            return clamp50(v + 50.0);
+        }
+
+        // Symmetric oscillators in [-100,100] → [-50,50]
+        if (this instanceof CMO ||
+            this instanceof Aroon) { // Aroon oscillator is typically in [-100,100]
+            return clamp50(v / 2.0);
+        }
 
         if (this instanceof Bollinger) {
             Bollinger b = (Bollinger) this;
@@ -81,10 +108,17 @@ public interface Indicator {
             return clamp50(pct - 50.0);
         }
 
-        // MOMENTUM (percent)
-        if (this instanceof ROC) {
-            // ROC is already percentage. Clip to sensible bounds.
+        // MOMENTUM-like percentages (already percent scale)
+        if (this instanceof ROC ||
+            this instanceof TRIX ||
+            this instanceof CoppockCurve) {
+            // Percent-based; just clamp aggressively to [-50,50]
             return clamp50(v);
+        }
+
+        // CCI: typical range around [-200,200]; scale to [-50,50]
+        if (this instanceof CCI) {
+            return clamp50(v / 4.0); // 200/4 = 50
         }
 
         // MACD (use histogram; scale by ATR%)
@@ -99,8 +133,19 @@ public interface Indicator {
             return clamp50(z);
         }
 
+        // Awesome Oscillator: also in price units → scale by ATR
+        if (this instanceof AwesomeOscillator) {
+            double atr = atrForScaling.value();
+            if (Double.isNaN(atr) || atr == 0.0) return 0.0;
+            double z = (v / atr) * 25.0;
+            return clamp50(z);
+        }
+
         // TREND (price vs MA), scale by ATR
-        if (this instanceof SMA || this instanceof EMA) {
+        if (this instanceof SMA ||
+            this instanceof EMA ||
+            this instanceof KAMA ||
+            this instanceof WMA) {
             double ma = v;
             double atr = atrForScaling.value();
             if (Double.isNaN(ma) || Double.isNaN(atr) || atr == 0.0) return 0.0;
@@ -109,12 +154,34 @@ public interface Indicator {
             return clamp50(z);
         }
 
-        // VOLATILITY-only (ATR): neutral signal (0). You can craft a rule later if needed.
+        // DPO: already "price - SMA shifted" -> treat like MA distance
+        if (this instanceof DPO) {
+            double atr = atrForScaling.value();
+            if (Double.isNaN(atr) || atr == 0.0) return 0.0;
+            double z = (v / atr) * 25.0;
+            return clamp50(z);
+        }
+
+        // Volatility-only indicators
+
+        // ATR: neutral signal (0). You can craft a rule later if needed.
         if (this instanceof ATR) {
             return 0.0;
         }
 
-        // Fallback: treat as z-ish using ATR as scale of typical move
+        // Ulcer Index: drawdown volatility in %; mostly in [0,50] → [0,50] then clamp
+        if (this instanceof UlcerIndex) {
+            return clamp50(v); // higher ulcer = more risk/upside for mean-reversion
+        }
+
+        // Mass Index: typical signal around ~25; center at 25, scale by ~2
+        if (this instanceof MassIndex) {
+            double z = (v - 25.0) * 2.0;
+            return clamp50(z);
+        }
+
+        // OBV & other cumulative / exotic stuff:
+        // Fallback: treat as z-ish using ATR as scale of typical move (if meaningful)
         double atr = atrForScaling.value();
         if (!Double.isNaN(atr) && atr != 0.0) {
             return clamp50((v / atr) * 10.0);

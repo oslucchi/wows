@@ -26,27 +26,36 @@ public class TextFileHandler {
     	this.dir = filePath;
     	this.pre = preamble;
     	this.extension = extension;
-    	open(true);
+    	open(true, true);
     }
     
     public TextFileHandler(String filePath, String preamble, String extension, boolean useTimestamp) 
     		throws Exception 
     {
-    	
     	this.dir = filePath;
     	this.pre = preamble;
     	this.extension = extension;
-    	open(useTimestamp);
+    	open(useTimestamp, true);
+    }  
+    
+    public TextFileHandler(String filePath, String preamble, String extension, boolean useTimestamp, boolean append) 
+    		throws Exception 
+    {
+    	this.dir = filePath;
+    	this.pre = preamble;
+    	this.extension = extension;
+    	open(useTimestamp, append);
     }
-    public void open(boolean useTimestamp) throws Exception {
+    
+    public void open(boolean useTimestamp, boolean append) throws Exception {
         try {
             file = new File(dir, pre + (useTimestamp ? "_" + ts : "") + "." + extension);
             file.getParentFile().mkdirs();
-            fileBufWriter = new BufferedWriter(new FileWriter(file, file.exists()));
-            log.trace("CSV opened at: " + file.getAbsolutePath());
+            fileBufWriter = new BufferedWriter(new FileWriter(file, append));
+            log.trace("File opened at: " + file.getAbsolutePath());
         } 
         catch (Exception e) {
-            log.error("Unable to open CSV for writing", e);
+            log.error("Unable to open file for writing", e);
             fileBufWriter = null;
             throw e;
         }

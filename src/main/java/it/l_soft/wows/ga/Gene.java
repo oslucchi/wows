@@ -60,22 +60,32 @@ public final class Gene implements GeneInterface {
     {
     	StringBuilder sb = new StringBuilder();
 		SimpleDateFormat sdf = new SimpleDateFormat("HH:mm:ss.sss");
-		boolean skipLog = false;
     	totalBarsSurviving++;
 
     	if (scores.getLength() > 0) {
-    		prediction = scoresReader.poll().getValue();
+    		try {
+        		prediction = scoresReader.poll().getValue();
+    		}
+    		catch(MissedItemsException e)
+    		{
+    			log.error("Gene " + name + ", error " + e.getMessage() + " on poll", e);
+    		}
 
     		// if we have at least one prediction, the last should be referred to the current bar
-			sb.append(String.format("%s,%s,%d,%s,%d,%d,%s,%d,%d,",
-    								name, this.name, totalBarsSurviving,
-    								sdf.format(new Date(prediction.timestamp)), prediction.barNumber, prediction.direction,
-    								sdf.format(new Date(currBar.getTimestamp())), currBar.getBarNumber(), marketDirection));
-    		sb.append(String.format("%.4f,%.4f,%.4f,%s - %s,%.4f,%.4f,",
+			sb.append(String.format("%s,%s,%d,",
+    								name, this.name, totalBarsSurviving));
+			sb.append(String.format("%s,%d,%d,%s - %s,",
+									sdf.format(new Date(currBar.getTimestamp())), currBar.getBarNumber(),
+									marketDirection,
+				    				(marketDirection >= 0 ? "LONG" : "SHORT"), 
+									(prediction.direction >= 0 ? "LONG" : "SHORT")
+								   ));
+			
+    		sb.append(String.format("%.4f,%.4f,%.4f,%.4f,%d,%.4f,",
 				    				prevBar.getClose(), currBar.getClose(), prediction.predictedMarketPrice,
-				    				(marketDirection > 0 ? "LONG" : "SHORT"), 
-									(prediction.direction > 0 ? "LONG" : "SHORT"),
-									predictedMoveNorm, denom));
+									predictedMoveNorm,
+									(predictedMoveNorm >= 0. ? 1 : -1),
+									denom));
 
     		int agreeOnDirection = marketDirection * prediction.direction;
     		double distance = Math.abs(prediction.predictedMarketPrice - currBar.getClose());
@@ -112,44 +122,32 @@ public final class Gene implements GeneInterface {
     		totalScore += prediction.score;
     		totalWin += agreeOnDirection;
     		
-    		sb.append(String.format("%s,%.4f,", sdf.format(new Date(currBar.getTimestamp())), prediction.score));
-    	}
-    	else
-    	{
-			sb.append(String.format("%s,%s,%d,%s,%d,%d,%s,%d,%d,", "", "", 0, "", 0, 0, "", 0, 0));
-    		sb.append(String.format("%.4f,%.4f,%.4f,%s - %s,%.4f,%.4f,", 0., 0., 0., "", "", 0., 0.));
-    		sb.append(String.format("%s,%.4f,", "", 0.));
-    		skipLog = true;
-    	}
-
-    	prediction = new ScoreHolder();
-    	prediction.timestamp = currBar.getTimestamp();
-    	prediction.barNumber = currBar.getBarNumber() + 1;
-
-    	// convert from normalized prediction back to real return
-    	double predictedReturn = predictedMoveNorm * denom; // e.g. +/- 1 * 0.01 = +/-1%
-    	prediction.predictedMarketPrice = currBar.getClose() * (1.0 + predictedReturn);
-    	prediction.direction = (Math.signum(predictedMoveNorm) >= 0) ? 1 : -1;
-		sb.append(String.format("%s,%d,%.4f,%s", 
-								sdf.format(new Date(prediction.timestamp)), 
-								prediction.barNumber, 
-								prediction.predictedMarketPrice,
-								(prediction.direction > 0 ? "long":"short)")));
-
-    	if (!skipLog)
-    	{
+    		sb.append(String.format("%.4f,", prediction.score));
     		try {
-	        	TextFileHandler temp = new TextFileHandler(props.getGeneEvalDumpPath(), props.getGeneEvalDumpName(), "csv", false);
+	        	TextFileHandler temp = new TextFileHandler(props.getGeneEvalDumpPath(), 
+	        											   props.getGeneEvalDumpName() + "_" + name.substring(0, 4), 
+	        											   "csv", false, true);
 				temp.write(sb.toString(), true);
 				temp.close();
 			} catch (Exception e) {
 				// TODO Auto-generated catch block
 				e.printStackTrace();
 			}
-//    		log.debug(sb.toString());
     	}
-    	
-    	this.scores.publish(prediction);
+
+    	if (name.compareTo("arbitrator") != 0)
+    	{
+        	prediction = new ScoreHolder();
+        	prediction.name = name;
+        	prediction.timestamp = currBar.getTimestamp();
+        	prediction.barNumber = currBar.getBarNumber() + 1;
+
+        	// convert from normalized prediction back to real return
+        	double predictedReturn = predictedMoveNorm * denom; // e.g. +/- 1 * 0.01 = +/-1%
+        	prediction.predictedMarketPrice = currBar.getClose() * (1.0 + predictedReturn);
+        	prediction.direction = (Math.signum(predictedMoveNorm) >= 0) ? 1 : -1;
+    		this.scores.publish(prediction);
+    	}
     }
 
 

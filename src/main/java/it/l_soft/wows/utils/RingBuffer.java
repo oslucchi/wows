@@ -5,6 +5,7 @@ import java.util.List;
 import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.ReentrantLock;
 
+
 /**
  * A generic, single-producer / multi-consumer ring buffer with overwrite semantics.
  *
@@ -153,7 +154,7 @@ public class RingBuffer<T> {
 
         private ConsumerHandle(RingBuffer<T> parent, long startSequence) {
             this.parent = parent;
-            this.nextSequence = startSequence;
+            this.nextSequence = (nextSequence > capacity ? nextSequence + 1 : 0);
         }
 
         /**
@@ -220,9 +221,7 @@ public class RingBuffer<T> {
                 int index = (int) (nextSequence % parent.capacity);
                 @SuppressWarnings("unchecked")
                 T value = (T) parent.buffer[index];
-                long seq = nextSequence;
-                nextSequence++;
-                return new ValueWithSequence<>(seq, value);
+                return new ValueWithSequence<>(nextSequence++, value);
 
             } finally {
                 parent.lock.unlock();

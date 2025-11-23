@@ -40,10 +40,17 @@ public final class GAEngine {
 		}
         initPopulation();
         try {
-        	TextFileHandler temp = new TextFileHandler(props.getGeneEvalDumpPath(), props.getGeneEvalDumpName(), "csv", false);
-    		temp.write("Gene,Indicators,BarsSurvived,PredTS,PredBar#,PredDir,MktTS,MktBar#,MktDir," +
- 				   	   "PrevClose,CurrClose,PredMktPrice,PredMove,Denom,BOH,PredUpdatedTS,PredScore," +
- 				   	   "nextTS,nextBar#,nextPredPrice,nextDir", true);
+        	TextFileHandler temp = new TextFileHandler(props.getGeneEvalDumpPath(), 
+        											   props.getGeneEvalDumpName() + "_" + "gene", 
+        											   "csv", false, false);
+    		temp.write("Gene,Indicators,BarsSurvived,MktTS,MktBar#,MktDir,Direction (M-P)," +
+ 				   	   "PrevClose,CurrClose,PredMktPrice,PredMove,PredMovSign,Denom,NextPredScore", true);
+			temp.close();
+        	temp = new TextFileHandler(props.getGeneEvalDumpPath(), 
+									   props.getGeneEvalDumpName() + "_" + "arbi", 
+									   "csv", false, false);
+			temp.write("Gene,Indicators,BarsSurvived,MktTS,MktBar#,MktDir,Direction (M-P)," +
+						"PrevClose,CurrClose,PredMktPrice,PredMove,Denom,NextPredScore", true);
 			temp.close();
 		} catch (Exception e) {
 			// TODO Auto-generated catch block
@@ -116,7 +123,7 @@ public final class GAEngine {
     	}
     	else
     	{
-    		arbitrator = new Gene("", null, null);
+    		arbitrator = new Gene("arbitrator", null, null);
     	}
 
     	// rank the population after evaluating their score
