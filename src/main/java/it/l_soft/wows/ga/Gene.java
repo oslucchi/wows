@@ -123,16 +123,19 @@ public final class Gene implements GeneInterface {
     		totalWin += agreeOnDirection;
     		
     		sb.append(String.format("%.4f,", prediction.score));
-    		try {
-	        	TextFileHandler temp = new TextFileHandler(props.getGeneEvalDumpPath(), 
-	        											   props.getGeneEvalDumpName() + "_" + name.substring(0, 4), 
-	        											   "csv", false, true);
-				temp.write(sb.toString(), true);
-				temp.close();
-			} catch (Exception e) {
-				// TODO Auto-generated catch block
-				e.printStackTrace();
-			}
+    		if (name.compareTo("arbitrator") == 0)
+    		{
+    			try {
+		        	TextFileHandler temp = new TextFileHandler(props.getGeneEvalDumpPath(), 
+		        											   props.getGeneEvalDumpName() + "_" + name.substring(0, 4), 
+		        											   "csv", false, true);
+					temp.write(sb.toString(), true);
+					temp.close();
+				} catch (Exception e) {
+					// TODO Auto-generated catch block
+					e.printStackTrace();
+				}
+    		}
     	}
 
     	if (name.compareTo("arbitrator") != 0)
