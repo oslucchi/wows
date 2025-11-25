@@ -7,7 +7,7 @@ public final class AtrNormalizedMoveTargetBuilder implements TargetBuilder {
 
     @Override
     public double buildTarget(int t, IndicatorContext ctx, ApplicationProperties props) {
-        int H = props.getHorizonBars();
+        int H = props.getHorizonBars(-1);
         double K = props.getAtrNormScale();
 
         int futureIndex = t + H;

@@ -31,9 +31,10 @@ public class ApplicationProperties {
 	private String indicatorsToInstantiate;
 
 	// GA configuration
-	private int geneSize = 5;                  // indicators per gene
-	private int populationSize = 200;
-	private int horizonBars = 1;               // predict next bar’s direction over this horizon
+	private int[] geneSize = {5,5,5};                  // indicators per gene
+	private int[] populationSize = {200,200,200};
+	private int[] horizonBars = {1,3,5};               // predict next bar’s direction over this horizon
+	private int numberOfPopulations = 3;
 	private double holdThresholdPct = 0.1;     // abs % change <= this ⇒ HOLD
 	private double elitePct = 0.25;            // survive unchanged
     private double crossoverPct = 0.50;        // produced by crossover
@@ -247,22 +248,44 @@ public class ApplicationProperties {
 	        {
 	        	defaultPrice = Price.parsePrice(properties.getProperty(variable).trim());
 	        }	
-	    	variable = "geneSize";
+        	
+	        String[] arrayOfTokens;
+        	int idx = 0;
+        	variable = "geneSize";
 	        if (properties.getProperty(variable) != null)
 	        {
-	        	geneSize = Integer.parseInt(properties.getProperty(variable).trim());
+	        	arrayOfTokens = properties.getProperty(variable).split(",");
+	        	geneSize = new int[arrayOfTokens.length];
+	        	for(String token : arrayOfTokens)
+	        	{
+	        		geneSize[idx++] = Integer.parseInt(token.trim());
+	        	}
 	        }	
 	    	variable = "populationSize";
 	        if (properties.getProperty(variable) != null)
 	        {
-	        	populationSize = Integer.parseInt(properties.getProperty(variable).trim());
+	        	arrayOfTokens = properties.getProperty(variable).split(",");
+	        	idx = 0;
+	        	populationSize = new int[arrayOfTokens.length];
+	        	for(String token : arrayOfTokens)
+	        	{
+	        		populationSize[idx++] = Integer.parseInt(token.trim());
+	        	}
 	        }	
-	    	variable = "horizonBars";
+
+	        variable = "horizonBars";
 	        if (properties.getProperty(variable) != null)
 	        {
-	        	horizonBars = Integer.parseInt(properties.getProperty(variable).trim());
+	        	arrayOfTokens = properties.getProperty(variable).split(",");
+	        	idx = 0;
+	        	horizonBars = new int[arrayOfTokens.length];
+	        	for(String token : arrayOfTokens)
+	        	{
+	        		horizonBars[idx++] = Integer.parseInt(token.trim());
+	        	}
 	        }
-	    	variable = "minBarsBeforeScoring";
+
+	        variable = "minBarsBeforeScoring";
 	        if (properties.getProperty(variable) != null)
 	        {
 	        	minBarsBeforeScoring = Integer.parseInt(properties.getProperty(variable).trim());
@@ -537,7 +560,7 @@ public class ApplicationProperties {
 	        if (properties.getProperty(variable) != null)
 	        {
 	        	values = properties.getProperty(variable).split(",");
-	        	int idx = 0;
+	        	idx = 0;
 	        	strategiesToUse = new String[values.length];
 	        	for(String value : values)
 	        	{
@@ -596,16 +619,16 @@ public class ApplicationProperties {
 		return indicatorsToInstantiate;
 	}
 
-	public int getGeneSize() {
-		return geneSize;
+	public int getGeneSize(int i) {
+		return geneSize[i];
 	}
 
-	public int getPopulationSize() {
-		return populationSize;
+	public int getPopulationSize(int i) {
+		return populationSize[i];
 	}
 
-	public int getHorizonBars() {
-		return horizonBars;
+	public int getHorizonBars(int i) {
+		return horizonBars[i];
 	}
 
 	public double getHoldThresholdPct() {
@@ -718,6 +741,10 @@ public class ApplicationProperties {
 
 	public String getGeneEvalDumpName() {
 		return geneEvalDumpName;
+	}
+
+	public int getNumberOfPopulations() {
+		return numberOfPopulations;
 	}
     
     

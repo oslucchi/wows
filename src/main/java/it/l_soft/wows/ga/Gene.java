@@ -2,11 +2,13 @@ package it.l_soft.wows.ga;
 
 import java.text.SimpleDateFormat;
 import java.util.Date;
+import java.util.List;
 
 import org.apache.log4j.Logger;
 
 import it.l_soft.wows.ApplicationProperties;
 import it.l_soft.wows.comms.MarketBar;
+import it.l_soft.wows.indicators.Indicator;
 import it.l_soft.wows.indicators.IndicatorContext;
 import it.l_soft.wows.utils.RingBuffer;
 import it.l_soft.wows.utils.RingBuffer.ConsumerHandle;
@@ -38,31 +40,58 @@ public final class Gene implements GeneInterface {
     private int	totalLong = 0;
     private int totalShort = 0;
     private long totalBarsSurviving = 0;
+    private int belongsToPopulation = -1;
     private RingBuffer<ScoreHolder> scores;
     private RingBuffer<ScoreHolder>.ConsumerHandle scoresReader;
     
     private ScoreHolder prediction;
 
-    public Gene(String name, int[] indicatorIndices, double[] weights) {
+    public Gene(String name, int[] indicatorIndices, double[] weights, int population) {
         this.name = name;
         this.indicatorIndices = indicatorIndices;
         this.weights = weights;
         this.scores = new RingBuffer<Gene.ScoreHolder>(50);
         scoresReader = scores.createConsumer();
+        this.belongsToPopulation = population;
     }
-        
-    public void evaluateScorePrediction(MarketBar currBar, MarketBar prevBar,
-    		int marketDirection,
-    		double predictedMoveNorm,
-    		double denom,
-    		String name)
+       
+    public void geneEvalMaths(Gene g, List<Indicator> indicators, MarketBar currBar, 
+			   MarketBar prevBar, double denom, String name)
+	{
+	     double z = 0.0;
+	     for (int i : g.getIndicatorIndices()) {
+	         // each indicator normalized to [-50,50] → divide by 50 → [-1,1]
+	         z += indicators.get(i).getNormalizedValue() / 50.0;
+	     }
+	     z /= Math.max(1, g.getIndicatorIndices().length); // average
+	     double yhat = Math.tanh(z / props.getPredictionTemperature());
+			try {
+				g.evaluateScorePrediction(currBar, prevBar,
+										  (int)(Math.signum(currBar.getClose() - prevBar.getClose())),
+										  yhat,
+										  denom, 
+										  name);
+			} catch (MissedItemsException e) {
+				// TODO Auto-generated catch block
+				e.printStackTrace();
+			}
+	     log.trace(String.format("[BAR %d][GENE %s] z=%.4f yhat=%.4f", 
+					currBar.getBarNumber(), g.getName(), z, yhat));
+	}
+    
+    public void evaluateScorePrediction(MarketBar currBar, 
+    									MarketBar prevBar,
+							    		int marketDirection,
+							    		double predictedMoveNorm,
+							    		double denom,
+							    		String name)
     				throws MissedItemsException
     {
     	StringBuilder sb = new StringBuilder();
 		SimpleDateFormat sdf = new SimpleDateFormat("HH:mm:ss.sss");
     	totalBarsSurviving++;
 
-    	if (scores.getLength() > 0) {
+    	if (scores.getLength() >= props.getHorizonBars(belongsToPopulation)) {
     		try {
         		prediction = scoresReader.poll().getValue();
     		}
@@ -127,7 +156,7 @@ public final class Gene implements GeneInterface {
     		{
     			try {
 		        	TextFileHandler temp = new TextFileHandler(props.getGeneEvalDumpPath(), 
-		        											   props.getGeneEvalDumpName() + "_" + name.substring(0, 4), 
+		        											   props.getGeneEvalDumpName() + "_arbi_" + belongsToPopulation, 
 		        											   "csv", false, true);
 					temp.write(sb.toString(), true);
 					temp.close();

@@ -188,7 +188,7 @@ public class TradingStationInterface extends Thread {
                     double marketMoveNorm = Math.max(-1.0, Math.min(1.0, ret / denom));                    
                     
                     // --- 3) For each gene: build composite yhat in [-1,1] and eval prediction
-                    ga.evalPopulation(indicators, currBar, prevBar, denom);
+                    ga.evalPopulations(indicators, currBar, prevBar, denom);
 	                                        
                     // --- 5) Append one CSV line for this bar ---
                     if (prevBar != null)
@@ -196,7 +196,6 @@ public class TradingStationInterface extends Thread {
 	                    appendCsvLine(barNumber, prevBar, ret, atrAbs, atrPct, props.getVolNormK(), marketMoveNorm);
                     }
                     ga.evolve(); // re-enable when you decide the cadence
-
                     barNumber++;
                     break;
 
@@ -236,47 +235,50 @@ public class TradingStationInterface extends Thread {
     private void appendCsvLine(long barNo, MarketBar bar, double ret, double atrAbs,
                                double atrPct, double K_VOL, double moveNorm) {
         if (csv == null) return;
-        try {
-            StringBuilder sb = new StringBuilder(1024);
-            // Base bar fields
-            sb.append(barNo).append(',')
-              .append(bar.getTimestamp()).append(',')
-              .append(fmt(bar.getOpen())).append(',')
-              .append(fmt(bar.getHigh())).append(',')
-              .append(fmt(bar.getLow())).append(',')
-              .append(fmt(bar.getClose())).append(',')
-              .append(fmt(ret)).append(',')
-              .append(fmt(atrAbs)).append(',')
-              .append(fmt(atrPct)).append(',')
-              .append(fmt(K_VOL)).append(',')
-              .append(fmt(moveNorm));
+        for (int populationIdx = 0; populationIdx < props.getNumberOfPopulations(); populationIdx++)
+        {
+            try {
+                StringBuilder sb = new StringBuilder(1024);
+                // Base bar fields
+                sb.append(barNo).append(',')
+                  .append(bar.getTimestamp()).append(',')
+                  .append(fmt(bar.getOpen())).append(',')
+                  .append(fmt(bar.getHigh())).append(',')
+                  .append(fmt(bar.getLow())).append(',')
+                  .append(fmt(bar.getClose())).append(',')
+                  .append(fmt(ret)).append(',')
+                  .append(fmt(atrAbs)).append(',')
+                  .append(fmt(atrPct)).append(',')
+                  .append(fmt(K_VOL)).append(',')
+                  .append(fmt(moveNorm));
 
-	    	ScoreHolder prediction;
-			prediction = null;
-			if ((prevBar.getBarNumber() > 0) && 
-				(ga.getArbitrator().getReader().getContentAsList().size() > 0))
-			{
-				prediction = (ScoreHolder) ga.getArbitrator().getReader().getContentAsList().getLast();
-                sb.append(',').append(prediction.name);
-                sb.append(',').append(fmt(prediction.timestamp));
-                sb.append(',').append(fmt(prediction.predictedMarketPrice));
-                sb.append(',').append(fmt(prediction.direction));
-			}
-			else
-			{
-				sb.append(",,0,0,0");
-			}
-            sb.append(',').append(fmt(ga.getArbitrator().getWinAccumulator()));
-            sb.append(',').append(fmt(ga.getArbitrator().getLongWin()));
-            sb.append(',').append(fmt(ga.getArbitrator().getTotalLong()));
-            sb.append(',').append(fmt(ga.getArbitrator().getShortWin()));
-            sb.append(',').append(fmt(ga.getArbitrator().getTotalShort()));
-            sb.append(',').append(fmt(ga.getArbitrator().getTotalScore()));
+    	    	ScoreHolder prediction;
+    			prediction = null;
+    			if ((prevBar.getBarNumber() > 0) && 
+    				(ga.getArbitrator(populationIdx).getReader().getContentAsList().size() > 0))
+    			{
+    				prediction = (ScoreHolder) ga.getArbitrator(populationIdx).getReader().getContentAsList().getLast();
+                    sb.append(',').append(prediction.name);
+                    sb.append(',').append(fmt(prediction.timestamp));
+                    sb.append(',').append(fmt(prediction.predictedMarketPrice));
+                    sb.append(',').append(fmt(prediction.direction));
+    			}
+    			else
+    			{
+    				sb.append(",,0,0,0");
+    			}
+                sb.append(',').append(fmt(ga.getArbitrator(populationIdx).getWinAccumulator()));
+                sb.append(',').append(fmt(ga.getArbitrator(populationIdx).getLongWin()));
+                sb.append(',').append(fmt(ga.getArbitrator(populationIdx).getTotalLong()));
+                sb.append(',').append(fmt(ga.getArbitrator(populationIdx).getShortWin()));
+                sb.append(',').append(fmt(ga.getArbitrator(populationIdx).getTotalShort()));
+                sb.append(',').append(fmt(ga.getArbitrator(populationIdx).getTotalScore()));
 
-            csv.write(sb.toString(), true);
-        } 
-        catch (IOException e) {
-            log.error("Error writing CSV line", e);
+                csv.write(sb.toString(), true);
+            } 
+            catch (IOException e) {
+                log.error("Error writing CSV line", e);
+            }
         }
     }
 

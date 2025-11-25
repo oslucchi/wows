@@ -11,7 +11,7 @@ public final class NormalizedMseFitnessEvaluator {
                            TargetBuilder targetBuilder,
                            ApplicationProperties props) {
 
-        int end = ctx.length() - props.getHorizonBars();
+        int end = ctx.length() - props.getHorizonBars(-1);
         double sumSq = 0.0;
         int count = 0;
 
