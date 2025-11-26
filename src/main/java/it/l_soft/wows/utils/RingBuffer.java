@@ -62,6 +62,11 @@ public class RingBuffer<T> {
     	return (nextSequenceToPublish > capacity ? capacity : nextSequenceToPublish);
     }
     
+    public long getNumberOfObjectsWritten()
+    {
+    	return nextSequenceToPublish;
+    }
+    
     
     /**
      * Create a new consumer starting from "now".

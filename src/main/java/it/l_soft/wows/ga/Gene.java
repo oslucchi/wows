@@ -1,19 +1,12 @@
 package it.l_soft.wows.ga;
 
-import java.text.SimpleDateFormat;
-import java.util.Date;
-import java.util.List;
-
-import org.apache.log4j.Logger;
+//import org.apache.log4j.Logger;
 
 import it.l_soft.wows.ApplicationProperties;
-import it.l_soft.wows.comms.MarketBar;
-import it.l_soft.wows.indicators.Indicator;
 import it.l_soft.wows.indicators.IndicatorContext;
 import it.l_soft.wows.utils.RingBuffer;
 import it.l_soft.wows.utils.RingBuffer.ConsumerHandle;
 import it.l_soft.wows.utils.RingBuffer.MissedItemsException;
-import it.l_soft.wows.utils.TextFileHandler;
 
 public final class Gene implements GeneInterface {
 	public class ScoreHolder {
@@ -26,8 +19,8 @@ public final class Gene implements GeneInterface {
 		public long barNumber = 0;
 	}
     private static final double SIGNAL_MAX_ABS = 50.0;
-
-	private final Logger log = Logger.getLogger(this.getClass());
+    
+//	private final Logger log = Logger.getLogger(this.getClass());
     private ApplicationProperties props = ApplicationProperties.getInstance();
 
     private String name;
@@ -40,149 +33,19 @@ public final class Gene implements GeneInterface {
     private int	totalLong = 0;
     private int totalShort = 0;
     private long totalBarsSurviving = 0;
-    private int belongsToPopulation = -1;
     private RingBuffer<ScoreHolder> scores;
     private RingBuffer<ScoreHolder>.ConsumerHandle scoresReader;
     
     private ScoreHolder prediction;
 
-    public Gene(String name, int[] indicatorIndices, double[] weights, int population) {
+    public Gene(String name, int[] indicatorIndices, double[] weights) {
         this.name = name;
         this.indicatorIndices = indicatorIndices;
         this.weights = weights;
         this.scores = new RingBuffer<Gene.ScoreHolder>(50);
-        scoresReader = scores.createConsumer();
-        this.belongsToPopulation = population;
+        this.scoresReader = scores.createConsumer();
     }
        
-    public void geneEvalMaths(Gene g, List<Indicator> indicators, MarketBar currBar, 
-			   MarketBar prevBar, double denom, String name)
-	{
-	     double z = 0.0;
-	     for (int i : g.getIndicatorIndices()) {
-	         // each indicator normalized to [-50,50] → divide by 50 → [-1,1]
-	         z += indicators.get(i).getNormalizedValue() / 50.0;
-	     }
-	     z /= Math.max(1, g.getIndicatorIndices().length); // average
-	     double yhat = Math.tanh(z / props.getPredictionTemperature());
-			try {
-				g.evaluateScorePrediction(currBar, prevBar,
-										  (int)(Math.signum(currBar.getClose() - prevBar.getClose())),
-										  yhat,
-										  denom, 
-										  name);
-			} catch (MissedItemsException e) {
-				// TODO Auto-generated catch block
-				e.printStackTrace();
-			}
-	     log.trace(String.format("[BAR %d][GENE %s] z=%.4f yhat=%.4f", 
-					currBar.getBarNumber(), g.getName(), z, yhat));
-	}
-    
-    public void evaluateScorePrediction(MarketBar currBar, 
-    									MarketBar prevBar,
-							    		int marketDirection,
-							    		double predictedMoveNorm,
-							    		double denom,
-							    		String name)
-    				throws MissedItemsException
-    {
-    	StringBuilder sb = new StringBuilder();
-		SimpleDateFormat sdf = new SimpleDateFormat("HH:mm:ss.sss");
-    	totalBarsSurviving++;
-
-    	if (scores.getLength() >= props.getHorizonBars(belongsToPopulation)) {
-    		try {
-        		prediction = scoresReader.poll().getValue();
-    		}
-    		catch(MissedItemsException e)
-    		{
-    			log.error("Gene " + name + ", error " + e.getMessage() + " on poll", e);
-    		}
-
-    		// if we have at least one prediction, the last should be referred to the current bar
-			sb.append(String.format("%s,%s,%d,",
-    								name, this.name, totalBarsSurviving));
-			sb.append(String.format("%s,%d,%d,%s - %s,",
-									sdf.format(new Date(currBar.getTimestamp())), currBar.getBarNumber(),
-									marketDirection,
-				    				(marketDirection >= 0 ? "LONG" : "SHORT"), 
-									(prediction.direction >= 0 ? "LONG" : "SHORT")
-								   ));
-			
-    		sb.append(String.format("%.4f,%.4f,%.4f,%.4f,%d,%.4f,",
-				    				prevBar.getClose(), currBar.getClose(), prediction.predictedMarketPrice,
-									predictedMoveNorm,
-									(predictedMoveNorm >= 0. ? 1 : -1),
-									denom));
-
-    		int agreeOnDirection = marketDirection * prediction.direction;
-    		double distance = Math.abs(prediction.predictedMarketPrice - currBar.getClose());
-    		
-    		if (agreeOnDirection >= 0) {
-    			if (prediction.direction > 0)
-    			{
-    				totalLong++;
-    				longWin++;
-    			}
-    			else
-    			{
-    				totalShort++;
-    				shortWin++;
-    			}
-    			prediction.successful = true;
-    		} 
-    		else {
-    			if (prediction.direction > 0)
-    			{
-    				totalLong++;
-    			}
-    			else
-    			{
-    				totalShort++;
-    			}
-    			prediction.successful = false;
-    		}
-
-//    		prediction.score = Math.max(bar.getClose() * .05, denom / (distance + 1e-9)); // optional epsilon for safety
-    		prediction.score = Math.min(currBar.getClose() * .05, 1 / (distance + 1e-9)) * // optional epsilon for safety
-    						   agreeOnDirection; 
-        	prediction.timestamp = currBar.getTimestamp();
-    		totalScore += prediction.score;
-    		totalWin += agreeOnDirection;
-    		
-    		sb.append(String.format("%.4f,", prediction.score));
-    		if (name.compareTo("arbitrator") == 0)
-    		{
-    			try {
-		        	TextFileHandler temp = new TextFileHandler(props.getGeneEvalDumpPath(), 
-		        											   props.getGeneEvalDumpName() + "_arbi_" + belongsToPopulation, 
-		        											   "csv", false, true);
-					temp.write(sb.toString(), true);
-					temp.close();
-				} catch (Exception e) {
-					// TODO Auto-generated catch block
-					e.printStackTrace();
-				}
-    		}
-    	}
-
-    	if (name.compareTo("arbitrator") != 0)
-    	{
-        	prediction = new ScoreHolder();
-        	prediction.name = name;
-        	prediction.timestamp = currBar.getTimestamp();
-        	prediction.barNumber = currBar.getBarNumber() + 1;
-
-        	// convert from normalized prediction back to real return
-        	double predictedReturn = predictedMoveNorm * denom; // e.g. +/- 1 * 0.01 = +/-1%
-        	prediction.predictedMarketPrice = currBar.getClose() * (1.0 + predictedReturn);
-        	prediction.direction = (Math.signum(predictedMoveNorm) >= 0) ? 1 : -1;
-    		this.scores.publish(prediction);
-    	}
-    }
-
-
 	public ScoreHolder getPrediction(long barNum) 
 			throws MissedItemsException {
 		return scoresReader.get(barNum).getValue();
@@ -302,6 +165,10 @@ public final class Gene implements GeneInterface {
 		return totalShort;
 	}
 
+	public int getTotalWin() {
+		return totalWin;
+	}
+	
 	public void setLongWin(int longWin) {
 		this.longWin = longWin;
 	}
@@ -317,6 +184,16 @@ public final class Gene implements GeneInterface {
 	public void setTotalShort(int totalShort) {
 		this.totalShort = totalShort;
 	}
+
+	public void setTotalWin(int totalWin)
+	{
+		this.totalWin = totalWin;
+	}
+	
+    public void setTotalScore(double totalScore) 
+    {
+        this.totalScore= totalScore ;
+    }
 
 	public double getWinRate() {
 		if (totalLong + totalShort > 0)
@@ -336,5 +213,4 @@ public final class Gene implements GeneInterface {
 	public void setTotalBarsSurviving(long totalBarsSurviving) {
 		this.totalBarsSurviving = totalBarsSurviving;
 	}
-	
 }

@@ -11,6 +11,7 @@ import org.apache.log4j.Logger;
 
 import it.l_soft.wows.ApplicationProperties;
 import it.l_soft.wows.ga.GAEngine;
+import it.l_soft.wows.ga.PopulationInstance;
 import it.l_soft.wows.ga.Gene.ScoreHolder;
 import it.l_soft.wows.indicators.Indicator;
 import it.l_soft.wows.indicators.volatility.ATR;
@@ -20,7 +21,7 @@ import it.l_soft.wows.utils.RingBuffer.MissedItemsException;
 import it.l_soft.wows.utils.TextFileHandler;
 import it.l_soft.wows.utils.Utilities;
 
-public class TradingStationInterface extends Thread {
+public class TCPBasedInstance extends RunInstance {
     private final Logger log = Logger.getLogger(this.getClass());
     ApplicationProperties props = ApplicationProperties.getInstance();
     long barNumber = 0;
@@ -36,8 +37,10 @@ public class TradingStationInterface extends Thread {
     ATR atrRef = null;
     TextFileHandler csv;
     boolean shutdown = false;
+    String fileNamePublished;
+    StreamHeader header;
 
-    public TradingStationInterface(List<Indicator> indicators) {
+    public TCPBasedInstance(List<Indicator> indicators) {
         this.indicators = indicators;
         ga = new GAEngine(indicators);
 
@@ -63,8 +66,9 @@ public class TradingStationInterface extends Thread {
         writeCsvHeaderIfNeeded(props.getVolNormK());
     }
 
-    public TradingStationInterface() { }
+    public TCPBasedInstance() { }
 
+    @Override
     public void shutdown() { shutdown = true; }
 
     public void closeSocket() {
@@ -75,52 +79,142 @@ public class TradingStationInterface extends Thread {
         }
         csv.close();
     }
+    
+    private int readFully(InputStream in, byte[] buf, int off, int len) throws IOException {
+        int total = 0;
+        while (total < len) {
+            int read = in.read(buf, off + total, len - total);
+            if (read == -1) {
+                // EOF while still expecting bytes
+                return total == 0 ? -1 : total;
+            }
+            total += read;
+        }
+        return total;
+    }
 
     public Message readMessageFromSocket() {
         Message message = new Message();
-        int len = 0;
+        int len;
         byte[] byteArray = new byte[4096];
 
         try {
             log.trace("read msg from inputStream");
-            Arrays.fill(byteArray, (byte)0);
-            input.read(byteArray, 0, 1);
+
+            // 1) Read topic (1 byte)
+            Arrays.fill(byteArray, (byte) 0);
+            int read = readFully(input, byteArray, 0, 1);
+            if (read == -1) {
+                // Remote side closed cleanly before a new message
+                log.info("Socket closed by remote peer while waiting for topic.");
+                closeSocketQuietly();
+                return null;
+            } else if (read < 1) {
+                // EOF in the middle of a field – protocol error
+                throw new EOFException("EOF while reading topic");
+            }
+
             message.setTopic(Character.toString((char) byteArray[0]));
             log.trace("Message topic is '" + message.getTopic() + "'");
 
-            input.read(byteArray, 0, Long.BYTES);
+            // 2) Read timestamp (8 bytes)
+            Arrays.fill(byteArray, (byte) 0);
+            read = readFully(input, byteArray, 0, Long.BYTES);
+            if (read == -1) {
+                log.info("Socket closed by remote peer while reading timestamp (no bytes read).");
+                closeSocketQuietly();
+                return null;
+            } else if (read < Long.BYTES) {
+                throw new EOFException("EOF while reading timestamp");
+            }
+
             message.setTimestamp(ByteBuffer.wrap(byteArray).getLong());
             log.trace("Message timestamp is '" + message.getTimestamp() + "'");
 
-            Arrays.fill(byteArray, (byte)0);
-            input.read(byteArray, 0, 4);
+            // 3) Read payload length (4 bytes)
+            Arrays.fill(byteArray, (byte) 0);
+            read = readFully(input, byteArray, 0, Integer.BYTES);
+            if (read == -1) {
+                log.info("Socket closed by remote peer while reading payload length (no bytes read).");
+                closeSocketQuietly();
+                return null;
+            } else if (read < Integer.BYTES) {
+                throw new EOFException("EOF while reading payload length");
+            }
+
             len = ByteBuffer.wrap(byteArray).getInt();
             log.trace("Going to receive " + len + " bytes");
 
-            Arrays.fill(byteArray, (byte)0);
-            input.read(byteArray, 0, len);
+            if (len < 0 || len > byteArray.length) {
+                throw new IllegalArgumentException("Invalid payload length: " + len);
+            }
+
+            // 4) Read payload (len bytes)
+            Arrays.fill(byteArray, (byte) 0);
+            read = readFully(input, byteArray, 0, len);
+            if (read == -1) {
+                log.info("Socket closed by remote peer while reading payload (no bytes read).");
+                closeSocketQuietly();
+                return null;
+            } else if (read < len) {
+                throw new EOFException("EOF while reading payload: expected " + len + ", got " + read);
+            }
+
             String jsonString = new String(byteArray, 0, len, StandardCharsets.UTF_8);
             log.trace("Received json object '" + jsonString + "'");
 
-            switch(message.getTopic()) {
+            switch (message.getTopic()) {
                 case "A":
-                    message = (TradeMessage) JSONWrapper.MAPPER.readValue(jsonString, TradeMessage.class);
+                    message = JSONWrapper.MAPPER.readValue(jsonString, TradeMessage.class);
                     break;
                 case "B":
-                    message = (MarketBar) JSONWrapper.MAPPER.readValue(jsonString, MarketBar.class);
+                    message = JSONWrapper.MAPPER.readValue(jsonString, MarketBar.class);
+                    break;
+                case "H":
+                    message = JSONWrapper.MAPPER.readValue(jsonString, StreamHeader.class);
+                    break;
+                default:
+                    log.warn("Unknown topic '" + message.getTopic() + "'");
                     break;
             }
+
             log.trace("json received converted into JAVA Object");
-        } catch(Exception e) {
-            log.error("Exception raised ", e);
-            log.error("Check the socket status to close our side and return null", e);
-            try { if (socket != null && !socket.isClosed()) socket.close(); } catch (IOException ignored) {}
+            return message;
+
+        } catch (Exception e) {
+            log.error("Exception raised while reading from socket", e);
+            log.error("Check the socket status to close our side and return null");
+            closeSocketQuietly();
             return null;
         }
-        return message;
     }
 
-    private void handleIncomingMessages() {
+    private void closeSocketQuietly() {
+        try {
+            if (socket != null && !socket.isClosed()) {
+            	for(int i = 0; i < props.getNumberOfPopulations(); i++)
+            	{
+                	PopulationInstance instance = ga.getPopulation(i);
+
+            		long[] acc = instance.getAccumulators();
+            		System.out.println(String.format("%s,%d,%d,%d,%.4f,%d,%.4f,$d,$.4f", 
+            										 header.dataFileName, props.getHorizonBars(i),
+            										 acc[GAEngine.TOTAL_RECORDS],
+            										 acc[GAEngine.MATCHES],
+            										 acc[GAEngine.MATCHES] / acc[GAEngine.TOTAL_RECORDS],
+            										 acc[GAEngine.FLAT],
+            										 acc[GAEngine.FLAT] / acc[GAEngine.MATCHES],
+            										 acc[GAEngine.ERRORS],
+            										 acc[GAEngine.ERRORS] / acc[GAEngine.MATCHES]));    										 
+            	}
+                socket.close();
+            }
+        } catch (IOException ignored) {
+        }
+    }
+
+    private void handleIncomingMessages() 
+    		throws MissedItemsException {
         Message message = null;
         TradeMessage trade;
 
@@ -204,6 +298,11 @@ public class TradingStationInterface extends Thread {
                     trade = (TradeMessage) message;
                     trade.setTimestamp(0);
                     break;
+
+                case "H":
+                    log.trace("The message is a header.");
+                    header = (StreamHeader) message;
+                    
             }
         }
     }
@@ -235,8 +334,10 @@ public class TradingStationInterface extends Thread {
     private void appendCsvLine(long barNo, MarketBar bar, double ret, double atrAbs,
                                double atrPct, double K_VOL, double moveNorm) {
         if (csv == null) return;
-        for (int populationIdx = 0; populationIdx < props.getNumberOfPopulations(); populationIdx++)
+        for (int i = 0; i < props.getNumberOfPopulations(); i++)
         {
+        	PopulationInstance instance = ga.getPopulation(i);
+
             try {
                 StringBuilder sb = new StringBuilder(1024);
                 // Base bar fields
@@ -255,9 +356,9 @@ public class TradingStationInterface extends Thread {
     	    	ScoreHolder prediction;
     			prediction = null;
     			if ((prevBar.getBarNumber() > 0) && 
-    				(ga.getArbitrator(populationIdx).getReader().getContentAsList().size() > 0))
+    				(instance.getArbitrator().getReader().getContentAsList().size() > 0))
     			{
-    				prediction = (ScoreHolder) ga.getArbitrator(populationIdx).getReader().getContentAsList().getLast();
+    				prediction = (ScoreHolder) instance.getArbitrator().getReader().getContentAsList().getLast();
                     sb.append(',').append(prediction.name);
                     sb.append(',').append(fmt(prediction.timestamp));
                     sb.append(',').append(fmt(prediction.predictedMarketPrice));
@@ -267,12 +368,12 @@ public class TradingStationInterface extends Thread {
     			{
     				sb.append(",,0,0,0");
     			}
-                sb.append(',').append(fmt(ga.getArbitrator(populationIdx).getWinAccumulator()));
-                sb.append(',').append(fmt(ga.getArbitrator(populationIdx).getLongWin()));
-                sb.append(',').append(fmt(ga.getArbitrator(populationIdx).getTotalLong()));
-                sb.append(',').append(fmt(ga.getArbitrator(populationIdx).getShortWin()));
-                sb.append(',').append(fmt(ga.getArbitrator(populationIdx).getTotalShort()));
-                sb.append(',').append(fmt(ga.getArbitrator(populationIdx).getTotalScore()));
+                sb.append(',').append(fmt(instance.getArbitrator().getWinAccumulator()));
+                sb.append(',').append(fmt(instance.getArbitrator().getLongWin()));
+                sb.append(',').append(fmt(instance.getArbitrator().getTotalLong()));
+                sb.append(',').append(fmt(instance.getArbitrator().getShortWin()));
+                sb.append(',').append(fmt(instance.getArbitrator().getTotalShort()));
+                sb.append(',').append(fmt(instance.getArbitrator().getTotalScore()));
 
                 csv.write(sb.toString(), true);
             } 
@@ -300,7 +401,10 @@ public class TradingStationInterface extends Thread {
         } catch (IOException ex) {
             log.error("I/O error: " + ex.getMessage());
             System.exit(-1);
-        }
+        } catch (MissedItemsException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
         closeSocket();
     }
 }
