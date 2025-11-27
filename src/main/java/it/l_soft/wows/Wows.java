@@ -107,7 +107,7 @@ public class Wows {
 		}
 		else 
 		{
-			instance = new TCPBasedInstance(indicators);
+			instance = new TCPBasedInstance(indicators, statsOut);
 		}
 		instance.run();
 		

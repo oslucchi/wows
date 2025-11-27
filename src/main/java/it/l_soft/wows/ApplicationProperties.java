@@ -55,6 +55,7 @@ public class ApplicationProperties {
     
     private int barsInMemory = 1000;
     private int genesWarmUpBars = 20;
+    private double minimalPriceChangeForDirection = 0;
     
     private double waitOfScoreInRanking = .65;
     private double waitOfWinRateInRanking = .35;
@@ -306,7 +307,14 @@ public class ApplicationProperties {
 	        {
 	        	setBarsInMemory(Integer.parseInt(properties.getProperty(variable).trim()));
 	        }
-	    	variable = "holdThresholdPct";
+	        
+	        variable = "minimalPriceChangeForDirection";
+	        if (properties.getProperty(variable) != null)
+	        {
+	        	minimalPriceChangeForDirection = Double.parseDouble(properties.getProperty(variable).trim());
+	        }
+	        
+        	variable = "holdThresholdPct";
 	        if (properties.getProperty(variable) != null)
 	        {
 	        	holdThresholdPct = Double.parseDouble(properties.getProperty(variable).trim());
@@ -745,6 +753,10 @@ public class ApplicationProperties {
 
 	public int getNumberOfPopulations() {
 		return numberOfPopulations;
+	}
+
+	public double getMinimalPriceChangeForDirection() {
+		return minimalPriceChangeForDirection;
 	}
     
     

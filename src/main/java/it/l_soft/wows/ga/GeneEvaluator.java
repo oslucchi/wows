@@ -54,13 +54,13 @@ public class GeneEvaluator {
     	SimpleDateFormat sdf = new SimpleDateFormat("HH:mm:ss.sss");
     	
     	int marketDirection;
-    	if (currBar.getClose() > prevBar.getClose())
-    	{
-    		marketDirection = 1;
-    	}
-    	else if (currBar.getClose() == prevBar.getClose())
+    	if (Math.abs(currBar.getClose() - prevBar.getClose()) < props.getMinimalPriceChangeForDirection())
     	{
     		marketDirection = 0;
+    	}
+    	else if (currBar.getClose() > prevBar.getClose())
+    	{
+    		marketDirection = 1;
     	}
     	else
     	{
@@ -140,7 +140,7 @@ public class GeneEvaluator {
 
     		prediction.timestamp = currBar.getTimestamp();
     		g.setTotalScore(g.getTotalScore() + prediction.score);
-    		g.setTotalWin(g.getTotalWin() + agreeOnDirection);
+    		g.setTotalWin(g.getTotalWin() + (agreeOnDirection == 1 ? 1 : 0));
 
     		sb.append(String.format("%.4f,", prediction.score));
     		if (name.compareTo("arbitrator") == 0)
@@ -168,27 +168,10 @@ public class GeneEvaluator {
     		// convert from normalized prediction back to real return
     		double predictedReturn = predictedMoveNorm * denom; // e.g. +/- 1 * 0.01 = +/-1%
     		prediction.predictedMarketPrice = currBar.getClose() * (1.0 + predictedReturn);
-    		prediction.direction = (int) (Math.abs(predictedMoveNorm) > 0 ? 
+    		prediction.direction = (int) (Math.abs(predictedMoveNorm) > props.getMinimalPriceChangeForDirection() ? 
     									  (Math.signum(predictedMoveNorm) >= 0 ? 1 : -1) :
     									  0);
     		g.getScores().publish(prediction);
     	}
-    }
-    
-    public void evalAccumulators()
-    {
-		@SuppressWarnings("unchecked")
-		List<ScoreHolder> scoresAsList = populationInstance.arbitrator.getReader().getContentAsList();
-    	populationInstance.accumulators[GAEngine.TOTAL_RECORDS] = g.getTotalBarsSurviving();
-		populationInstance.accumulators[GAEngine.MATCHES] = g.getScores().getNumberOfObjectsWritten();
-
-		if (!scoresAsList.getLast().successful)
-		{
-			populationInstance.accumulators[GAEngine.ERRORS]++;
-		}
-		if (scoresAsList.getLast().direction == 0)
-		{
-			populationInstance.accumulators[GAEngine.FLAT]++;
-		}
     }
 }

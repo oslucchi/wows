@@ -39,8 +39,10 @@ public class TCPBasedInstance extends RunInstance {
     boolean shutdown = false;
     String fileNamePublished;
     StreamHeader header;
+    
+    File statsOutput;
 
-    public TCPBasedInstance(List<Indicator> indicators) {
+    public TCPBasedInstance(List<Indicator> indicators, File statsOutput) {
         this.indicators = indicators;
         ga = new GAEngine(indicators);
 
@@ -405,6 +407,7 @@ public class TCPBasedInstance extends RunInstance {
 			// TODO Auto-generated catch block
 			e.printStackTrace();
 		}
+	    ga.evalPopulationAccumulators("TCPInterface", currBar.getBarNumber(), statsOutput);
         closeSocket();
     }
 }

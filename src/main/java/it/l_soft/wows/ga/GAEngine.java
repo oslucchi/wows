@@ -8,14 +8,17 @@ import it.l_soft.wows.indicators.volatility.ATR;
 import it.l_soft.wows.utils.RingBuffer.MissedItemsException;
 import it.l_soft.wows.utils.TextFileHandler;
 
+import java.io.BufferedWriter;
+import java.io.File;
+import java.io.FileWriter;
 import java.text.SimpleDateFormat;
 import java.util.*;
 import java.util.concurrent.ThreadLocalRandom;
 
-//import org.apache.log4j.Logger;
+import org.apache.log4j.Logger;
 
 public class GAEngine {
-//	private final Logger log = Logger.getLogger(this.getClass());
+	private final Logger log = Logger.getLogger(this.getClass());
     public static final int TOTAL_RECORDS = 0;
     public static final int MATCHES = 1;
     public static final int FLAT = 2;
@@ -136,7 +139,6 @@ public class GAEngine {
     		ge.evaluateScorePrediction(currBar, prevBar, 
         							   yhat, denom, 
         							   "arbitrator");
-    		ge.evalAccumulators();
     	}
     	else
     	{
@@ -172,7 +174,7 @@ public class GAEngine {
         newPrediction.timestamp = firstInRankScore.timestamp;
         newPrediction.direction = firstInRankScore.direction;
         newPrediction.predictedMarketPrice = firstInRankScore.predictedMarketPrice;
-        arbitrator.setTotalBarsSurviving(arbitrator.getTotalBarsSurviving() + 1);
+//        arbitrator.setTotalBarsSurviving(arbitrator.getTotalBarsSurviving() + 1);
         
         arbitrator.getScores().publish(newPrediction);
         
@@ -262,9 +264,61 @@ public class GAEngine {
         crossed[1].resetIndicators();
         
         return crossed;
-    }  
+    }
+    
+    public void evalPopulationAccumulators(String sourceName, long totalBarsRead, File statsOutput)
+    {
+    	BufferedWriter fileBufWriter = null;
+    	
+        try {
+        	fileBufWriter = new BufferedWriter(new FileWriter(statsOutput, false));
+            log.trace("Writing to: " + statsOutput.getAbsolutePath());
+            fileBufWriter.write("Filename,ForwardBar,TotalRecords,Matches,MatchesPercent," + 
+            					"Flat,FlatPercent,Errors,ErrorsPercent,Accuracy\n");
+			for(int i = 0; i < props.getNumberOfPopulations(); i++)
+			{
+					evalInstanceAccumulators(population[i], totalBarsRead);
+					long[] accumulators = population[i].accumulators;
+					fileBufWriter.write(
+							String.format("%s,%d,%d,%d,%.4f,%d,%.4f,%d,%.4f,%.4f\n",
+										  sourceName,
+										  props.getHorizonBars(i),
+										  accumulators[TOTAL_RECORDS],
+										  accumulators[GAEngine.MATCHES],
+										  (double) accumulators[GAEngine.MATCHES] * 100 / 
+										  		   accumulators[TOTAL_RECORDS],
+										  accumulators[GAEngine.FLAT],
+										  (double) accumulators[GAEngine.FLAT] * 100 /
+										  		   accumulators[TOTAL_RECORDS],
+										  accumulators[GAEngine.ERRORS],
+										  (double) accumulators[GAEngine.ERRORS] * 100 /
+										  		   accumulators[GAEngine.TOTAL_RECORDS],
+										  (double) accumulators[GAEngine.MATCHES] * 100 /
+										  		   (accumulators[GAEngine.TOTAL_RECORDS] - accumulators[GAEngine.FLAT])
+										 ));
+			}
+			fileBufWriter.flush();
+			fileBufWriter.close();
+        } 
+        catch (Exception e) {
+            log.error("Unable to open file for writing", e);
+            return;
+        }
+    }
 
-	public List<Gene>getRank(int i) {
+    public void evalInstanceAccumulators(PopulationInstance populationInstance, long totalBarsRead)
+    {
+    	Gene g = populationInstance.arbitrator;
+    	populationInstance.accumulators[GAEngine.TOTAL_RECORDS] = totalBarsRead;
+		populationInstance.accumulators[GAEngine.MATCHES] = g.getTotalBarsSurviving();
+		populationInstance.accumulators[GAEngine.ERRORS] = g.getTotalBarsSurviving() -
+														   g.getTotalWin();
+		populationInstance.accumulators[GAEngine.FLAT] = g.getTotalBarsSurviving() -
+														 g.getTotalLong() -
+														 g.getTotalShort();
+    }
+
+    public List<Gene>getRank(int i) {
 		return ranks[i];
 	}
 	

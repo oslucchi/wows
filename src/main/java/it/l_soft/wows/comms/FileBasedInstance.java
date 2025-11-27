@@ -115,6 +115,12 @@ public class FileBasedInstance extends RunInstance {
         	// nothing could be done on the very first bar
         	return;
         }
+        if (currBar.getBarNumber() < props.getGenesWarmUpBars())
+        {
+        	barNumber++;
+        	// do not consider this yet
+        	return;
+        }
         
         // -- 2) calculate normalized values for the market move
         double ret = (currBar.getClose() - prevBar.getClose()) / prevBar.getClose();
@@ -244,6 +250,8 @@ public class FileBasedInstance extends RunInstance {
     	    						  Long.parseLong(tokens[6]));
     	    	handleNextBar(bar);
     	    }
+    	    ga.evalPopulationAccumulators(barsSourceFile.getName(), currBar.getBarNumber(), statsOutput);
+
     	} catch (FileNotFoundException e) {
 			// TODO Auto-generated catch block
 			e.printStackTrace();
@@ -259,37 +267,6 @@ public class FileBasedInstance extends RunInstance {
 		} catch (MissedItemsException e) {
 			// TODO Auto-generated catch block
 			e.printStackTrace();
-		}
-    	
-    	BufferedWriter fileBufWriter = null;
-        try {
-        	fileBufWriter = new BufferedWriter(new FileWriter(statsOutput, false));
-            log.trace("Writing to: " + statsOutput.getAbsolutePath());
-            fileBufWriter.write("Filename,ForwardBar,TotalRecords,Matches,MatchesPercent," + 
-            					"Flat,FlatPercent,Errors,ErrorsPercent,Accuracy\n");
-			for(int i = 0; i < props.getNumberOfPopulations(); i++)
-			{
-					long[] accumulators = ga.getPopulation(i).getAccumulators();
-					fileBufWriter.write(
-							String.format("%s,%d,%d,%d,%.4f,%d,%.4f,%d,%.4f,%.4f\n",
-										  barsSourceFile.getName(),
-										  props.getHorizonBars(i),
-										  barNumber - 1,
-										  accumulators[GAEngine.MATCHES],
-										  (double) accumulators[GAEngine.MATCHES] * 100 / (barNumber - 1),
-										  accumulators[GAEngine.FLAT],
-										  (double) accumulators[GAEngine.FLAT] * 100 / (barNumber - 1),
-										  accumulators[GAEngine.ERRORS],
-										  (double) accumulators[GAEngine.ERRORS] * 100 / (barNumber - 1),
-										  (double) accumulators[GAEngine.MATCHES] * 100 / (barNumber - accumulators[GAEngine.FLAT] -1)
-										 ));
-			}
-			fileBufWriter.flush();
-			fileBufWriter.close();
-        } 
-        catch (Exception e) {
-            log.error("Unable to open file for writing", e);
-            return;
-        }
+		}    	
     }
 }
