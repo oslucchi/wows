@@ -97,7 +97,7 @@ public class Wows {
 	}
 
 	private static void runNewRound(File sourceFile) 
-			throws InterruptedException, IOException
+			throws Exception
 	{
 		BufferedReader reader = new BufferedReader(new InputStreamReader(System.in));
 
@@ -144,7 +144,9 @@ public class Wows {
 		}		
 	}
 	
-	public static void main(String[] args) throws InterruptedException, IOException {
+	public static void main(String[] args) 
+			throws Exception 
+	{
 
 		initLogger();
 		initInlineOptions(args);

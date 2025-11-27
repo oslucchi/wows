@@ -29,6 +29,7 @@ public class ApplicationProperties {
 	private boolean consoleOut;
 	private long shutdownGracePeriod;
 	private String indicatorsToInstantiate;
+	private String timestampFormat;
 
 	// GA configuration
 	private int[] geneSize = {5,5,5};                  // indicators per gene
@@ -222,6 +223,12 @@ public class ApplicationProperties {
 	        	geneEvalDumpName = properties.getProperty(variable).trim();
 	        }
 
+	        variable = "timestampFormat";
+	        if (properties.getProperty(variable) != null)
+	        {
+	        	timestampFormat = properties.getProperty(variable).trim();
+	        }
+	        
 	        variable = "consoleOut";
 	        if (properties.getProperty(variable) != null)
 	        {
@@ -757,6 +764,10 @@ public class ApplicationProperties {
 
 	public double getMinimalPriceChangeForDirection() {
 		return minimalPriceChangeForDirection;
+	}
+
+	public String getTimestampFormat() {
+		return timestampFormat;
 	}
     
     

@@ -6,7 +6,7 @@ import org.slf4j.LoggerFactory;
 public class Message {
 	final Logger log = LoggerFactory.getLogger(this.getClass());
     private String topic;
-    private	long timestamp;
+    protected	long timestamp;
     
     public Message() {}
     

@@ -42,7 +42,9 @@ public class TCPBasedInstance extends RunInstance {
     
     File statsOutput;
 
-    public TCPBasedInstance(List<Indicator> indicators, File statsOutput) {
+    public TCPBasedInstance(List<Indicator> indicators, File statsOutput) 
+    		throws Exception 
+   {
         this.indicators = indicators;
         ga = new GAEngine(indicators);
 
@@ -216,7 +218,8 @@ public class TCPBasedInstance extends RunInstance {
     }
 
     private void handleIncomingMessages() 
-    		throws MissedItemsException {
+    		throws MissedItemsException, IOException 
+    {
         Message message = null;
         TradeMessage trade;
 

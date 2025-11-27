@@ -20,6 +20,7 @@ public class MarketBar extends Message implements Bar {
         this.close = close;
         this.volume = volume;
         this.barNumber = barNumber;
+        this.timestamp = timestamp;
     }
 
     // Getters

@@ -10,7 +10,6 @@ import it.l_soft.wows.ApplicationProperties;
 import it.l_soft.wows.comms.MarketBar;
 import it.l_soft.wows.ga.Gene.ScoreHolder;
 import it.l_soft.wows.indicators.Indicator;
-import it.l_soft.wows.utils.TextFileHandler;
 import it.l_soft.wows.utils.RingBuffer.MissedItemsException;
 
 public class GeneEvaluator {
@@ -42,7 +41,7 @@ public class GeneEvaluator {
 	}
 	
 	
-    public void evaluateScorePrediction(MarketBar currBar, 
+    public String evaluateScorePrediction(MarketBar currBar, 
 							    		MarketBar prevBar,
 							    		double predictedMoveNorm,
 							    		double denom,
@@ -51,10 +50,11 @@ public class GeneEvaluator {
     {
     	StringBuilder sb = new StringBuilder();
         ScoreHolder prediction = null;
-    	SimpleDateFormat sdf = new SimpleDateFormat("HH:mm:ss.sss");
+    	SimpleDateFormat sdf = new SimpleDateFormat(props.getTimestampFormat());
     	
     	int marketDirection;
-    	if (Math.abs(currBar.getClose() - prevBar.getClose()) < props.getMinimalPriceChangeForDirection())
+    	if (Math.abs(currBar.getClose() - prevBar.getClose()) / currBar.getClose() 
+    			< props.getMinimalPriceChangeForDirection())
     	{
     		marketDirection = 0;
     	}
@@ -79,24 +79,28 @@ public class GeneEvaluator {
     			log.error("Gene " + name + ", error " + e.getMessage() + " on poll", e);
     			throw e;
     		}
-
+    		
+    		String indicatorsUsed = "";
+    		for(int indicatorIdx : g.getIndicatorIndices())
+    		{
+    			indicatorsUsed += indicators.get(indicatorIdx).getName() + " ";
+    		}
+    		
     		// if we have at least one prediction, the last should be referred to the current bar
     		sb.append(String.format("%s,%s,%d,",
-    								name, name, g.getTotalBarsSurviving()));
+    								name, indicatorsUsed, g.getTotalBarsSurviving()));
     		sb.append(String.format("%s,%d,%d,%s - %s,",
 				    				sdf.format(new Date(currBar.getTimestamp())), currBar.getBarNumber(),
 				    				marketDirection,
-				    				(marketDirection >= 0 ? "LONG" : "SHORT"), 
-				    				(prediction.direction >= 0 ? "LONG" : "SHORT")
-				    			   )
-    				);
+				    				(marketDirection > 0 ? "LONG" : (marketDirection == 0 ? "FLAT" : "SHORT")), 
+				    				(prediction.direction > 0 ? "LONG" : (prediction.direction == 0 ? "FLAT" : "SHORT"))
+				    			   ));
 
     		sb.append(String.format("%.4f,%.4f,%.4f,%.4f,%d,%.4f,",
 				    				prevBar.getClose(), currBar.getClose(), prediction.predictedMarketPrice,
 				    				predictedMoveNorm,
 				    				(predictedMoveNorm >= 0. ? 1 : -1),
-				    				denom)
-    				);
+				    				denom));
 
     		int agreeOnDirection = marketDirection * prediction.direction;
     		double distance = Math.abs(prediction.predictedMarketPrice - currBar.getClose());
@@ -143,19 +147,6 @@ public class GeneEvaluator {
     		g.setTotalWin(g.getTotalWin() + (agreeOnDirection == 1 ? 1 : 0));
 
     		sb.append(String.format("%.4f,", prediction.score));
-    		if (name.compareTo("arbitrator") == 0)
-    		{
-    			try {
-    				TextFileHandler temp = new TextFileHandler(props.getGeneEvalDumpPath(), 
-    						props.getGeneEvalDumpName() + "_arbi_" + populationInstance.populationId, 
-    						"csv", false, true);
-    				temp.write(sb.toString(), true);
-    				temp.close();
-    			} catch (Exception e) {
-    				// TODO Auto-generated catch block
-    				e.printStackTrace();
-    			}
-    		}
     	}
 
     	if ((name != null) && (name.compareTo("arbitrator") != 0))
@@ -168,10 +159,14 @@ public class GeneEvaluator {
     		// convert from normalized prediction back to real return
     		double predictedReturn = predictedMoveNorm * denom; // e.g. +/- 1 * 0.01 = +/-1%
     		prediction.predictedMarketPrice = currBar.getClose() * (1.0 + predictedReturn);
-    		prediction.direction = (int) (Math.abs(predictedMoveNorm) > props.getMinimalPriceChangeForDirection() ? 
-    									  (Math.signum(predictedMoveNorm) >= 0 ? 1 : -1) :
-    									  0);
+    		prediction.direction = (int) (Math.abs(predictedReturn) < props.getMinimalPriceChangeForDirection() ? 
+    									  	0 
+    									  :
+    										(Math.signum(predictedReturn) >= 0 ? 1 : -1)
+    									  );
     		g.getScores().publish(prediction);
     	}
-    }
+    	
+    	return sb.toString();
+	}
 }

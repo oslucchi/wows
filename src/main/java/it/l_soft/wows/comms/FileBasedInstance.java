@@ -39,7 +39,9 @@ public class FileBasedInstance extends RunInstance {
     File statsOutput;
     int barsToRead = 0;
 
-    public FileBasedInstance(List<Indicator> indicators, File barsSourceFile, File statsOutput, int barsToRead) {
+    public FileBasedInstance(List<Indicator> indicators, File barsSourceFile, File statsOutput, int barsToRead) 
+    		throws Exception 
+    {
         this.barsSourceFile = barsSourceFile;
         this.statsOutput = statsOutput;
     	this.indicators = indicators;
@@ -77,7 +79,8 @@ public class FileBasedInstance extends RunInstance {
     
     
     private void handleNextBar(MarketBar bar) 
-    		throws MissedItemsException {
+    		throws MissedItemsException, IOException
+    {
 
         currBar = bar;
         currBar.setBarNumber(barNumber);

@@ -11,7 +11,7 @@ import it.l_soft.wows.utils.TextFileHandler;
 import java.io.BufferedWriter;
 import java.io.File;
 import java.io.FileWriter;
-import java.text.SimpleDateFormat;
+import java.io.IOException;
 import java.util.*;
 import java.util.concurrent.ThreadLocalRandom;
 
@@ -28,17 +28,20 @@ public class GAEngine {
 	ApplicationProperties props = ApplicationProperties.getInstance();
     private final List<Indicator> catalog; // all available indicator *prototypes* (NOT shared state!)
     private final PopulationInstance[] population = new PopulationInstance[props.getNumberOfPopulations()];
+    private TextFileHandler[] predictions = new TextFileHandler[props.getNumberOfPopulations()];
     
     @SuppressWarnings("unchecked")
 	private List<Gene>[] ranks = (List<Gene>[]) new List[props.getNumberOfPopulations()];;
 
     // Shared ATR for normalization scaling
     private final ATR atrScale;
-
+    
 	// For horizon scoring, keep a ring of past closes (or compute pct when horizon fulfilled)
 	//  private final Deque<Double> closeRing = new ArrayDeque<>();
 
-    public GAEngine(List<Indicator> indicatorCatalog) {
+    public GAEngine(List<Indicator> indicatorCatalog) 
+    		throws Exception 
+    {
         this.catalog = indicatorCatalog;
         this.atrScale = new ATR(props.getAtrPeriodForScaling());
         for(int i = 0; i < props.getNumberOfPopulations(); i++)
@@ -48,6 +51,11 @@ public class GAEngine {
                 genes.add(randomGene(props.getPopulationSize(i)));
             }
         	population[i] = PopulationInstance.initPopulation(i, genes, props.getHorizonBars(i), TOTAL_ACCUMULATORS);
+        	predictions[i] = new TextFileHandler(props.getCSVFilePath(), "prediction_" + i, "csv");
+        	predictions[i].write("Gene,Indicators,BarsSurvived,MktTS," +
+        						 "MktBar#,MktDir,Direction (M-P)," +
+        						 "PrevClose,CurrClose,PredMktPrice,PredMove,PredMovSign," + 
+        						 "Denom,NextPredScore", true);
         }
     }
 
@@ -70,50 +78,19 @@ public class GAEngine {
     }
     
     public void evalPopulations(List<Indicator> indicators, MarketBar currBar, 
-			   					MarketBar prevBar, double denom) throws MissedItemsException
+			   					MarketBar prevBar, double denom) 
+			   throws MissedItemsException, IOException
     {
-		SimpleDateFormat sdf = new SimpleDateFormat("HH:mm:ss.sss");
-
-    	double consolidatedPrediction= 0;
-    	StringBuilder sb = new StringBuilder();
-		sb.append(String.format("%d,%s,",
-								prevBar.getBarNumber(),
-								sdf.format(new Date(prevBar.getTimestamp()))));
     	for(int i = 0; i < props.getNumberOfPopulations(); i++)
     	{
     		population[i] = evalPopulation(population[i], indicators, currBar, prevBar, denom);
-    		try {
-    			if (prevBar.getBarNumber() > 50)
-    			{
-    				consolidatedPrediction += population[i].arbitrator.getPrediction(prevBar.getBarNumber()).direction;
-        			sb.append(String.format("%d,", 
-        					population[i].arbitrator.getPrediction(prevBar.getBarNumber()).direction));
-    			}
-    			else
-    			{
-        			sb.append(String.format("0,"));     				
-    			}
-			} catch (MissedItemsException e) {
-				// TODO Auto-generated catch block
-				e.printStackTrace();
-			}    		
     	}
-		sb.append(String.format("%.4f,", consolidatedPrediction));
-		TextFileHandler temp;
-		try {
-			temp = new TextFileHandler(props.getGeneEvalDumpPath(),"SuperArbitrator", "csv", false, true);
-			temp.write(sb.toString(), true);
-			temp.close();
-		} catch (Exception e) {
-			// TODO Auto-generated catch block
-			e.printStackTrace();
-		}
     }
     
     public PopulationInstance evalPopulation(PopulationInstance populationInstance, 
     										 List<Indicator> indicators, MarketBar currBar, 
     										 MarketBar prevBar, double denom) 
-    		throws MissedItemsException
+    		throws MissedItemsException, IOException
     {
     	// do the evaluation math on each gene
     	double yhat;
@@ -136,9 +113,10 @@ public class GAEngine {
     		ge = new GeneEvaluator(arbitrator, indicators, populationInstance);
     		yhat = ge.predictMarketMovement();
 
-    		ge.evaluateScorePrediction(currBar, prevBar, 
-        							   yhat, denom, 
-        							   "arbitrator");
+    		String s = ge.evaluateScorePrediction(currBar, prevBar, 
+			        							  yhat, denom, 
+			        							  "arbitrator");
+    		predictions[populationInstance.populationId].write(s, true);
     	}
     	else
     	{
@@ -167,14 +145,12 @@ public class GAEngine {
     	}
         
         ScoreHolder newPrediction = arbitrator.new ScoreHolder();
-        
-        // arbitrator.setName(firstInRank.getName());
+
         arbitrator.setIndicatorIndices(firstInRank.getIndicatorIndices());
         newPrediction.name = arbitrator.getName();
         newPrediction.timestamp = firstInRankScore.timestamp;
         newPrediction.direction = firstInRankScore.direction;
         newPrediction.predictedMarketPrice = firstInRankScore.predictedMarketPrice;
-//        arbitrator.setTotalBarsSurviving(arbitrator.getTotalBarsSurviving() + 1);
         
         arbitrator.getScores().publish(newPrediction);
         
@@ -277,25 +253,26 @@ public class GAEngine {
             					"Flat,FlatPercent,Errors,ErrorsPercent,Accuracy\n");
 			for(int i = 0; i < props.getNumberOfPopulations(); i++)
 			{
-					evalInstanceAccumulators(population[i], totalBarsRead);
-					long[] accumulators = population[i].accumulators;
-					fileBufWriter.write(
-							String.format("%s,%d,%d,%d,%.4f,%d,%.4f,%d,%.4f,%.4f\n",
-										  sourceName,
-										  props.getHorizonBars(i),
-										  accumulators[TOTAL_RECORDS],
-										  accumulators[GAEngine.MATCHES],
-										  (double) accumulators[GAEngine.MATCHES] * 100 / 
-										  		   accumulators[TOTAL_RECORDS],
-										  accumulators[GAEngine.FLAT],
-										  (double) accumulators[GAEngine.FLAT] * 100 /
-										  		   accumulators[TOTAL_RECORDS],
-										  accumulators[GAEngine.ERRORS],
-										  (double) accumulators[GAEngine.ERRORS] * 100 /
-										  		   accumulators[GAEngine.TOTAL_RECORDS],
-										  (double) accumulators[GAEngine.MATCHES] * 100 /
-										  		   (accumulators[GAEngine.TOTAL_RECORDS] - accumulators[GAEngine.FLAT])
-										 ));
+				evalInstanceAccumulators(population[i], totalBarsRead);
+				long[] accumulators = population[i].accumulators;
+				fileBufWriter.write(
+					String.format("%s,%d,%d,%d,%.4f,%d,%.4f,%d,%.4f,%.4f\n",
+								  sourceName,
+								  props.getHorizonBars(i),
+								  accumulators[TOTAL_RECORDS],
+								  accumulators[GAEngine.MATCHES],
+								  (double) accumulators[GAEngine.MATCHES] * 100 / 
+								  		   accumulators[TOTAL_RECORDS],
+								  accumulators[GAEngine.FLAT],
+								  (double) accumulators[GAEngine.FLAT] * 100 /
+								  		   accumulators[TOTAL_RECORDS],
+								  accumulators[GAEngine.ERRORS],
+								  (double) accumulators[GAEngine.ERRORS] * 100 /
+								  		   accumulators[GAEngine.TOTAL_RECORDS],
+								  (double) accumulators[GAEngine.MATCHES] * 100 /
+								  		   (accumulators[GAEngine.TOTAL_RECORDS] - accumulators[GAEngine.FLAT])
+								 ));
+				predictions[i].close();
 			}
 			fileBufWriter.flush();
 			fileBufWriter.close();
@@ -304,18 +281,17 @@ public class GAEngine {
             log.error("Unable to open file for writing", e);
             return;
         }
+        
     }
 
     public void evalInstanceAccumulators(PopulationInstance populationInstance, long totalBarsRead)
     {
     	Gene g = populationInstance.arbitrator;
     	populationInstance.accumulators[GAEngine.TOTAL_RECORDS] = totalBarsRead;
-		populationInstance.accumulators[GAEngine.MATCHES] = g.getTotalBarsSurviving();
-		populationInstance.accumulators[GAEngine.ERRORS] = g.getTotalBarsSurviving() -
-														   g.getTotalWin();
-		populationInstance.accumulators[GAEngine.FLAT] = g.getTotalBarsSurviving() -
-														 g.getTotalLong() -
-														 g.getTotalShort();
+		populationInstance.accumulators[GAEngine.MATCHES] = g.getTotalLong() + g.getTotalShort();
+		populationInstance.accumulators[GAEngine.ERRORS] = totalBarsRead - g.getTotalWin();
+		populationInstance.accumulators[GAEngine.FLAT] = totalBarsRead - 
+														 populationInstance.accumulators[GAEngine.MATCHES];
     }
 
     public List<Gene>getRank(int i) {
