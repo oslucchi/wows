@@ -115,8 +115,11 @@ public class GAEngine {
 
     		String s = ge.evaluateScorePrediction(currBar, prevBar, 
 			        							  yhat, denom, 
-			        							  "arbitrator");
-    		predictions[populationInstance.populationId].write(s, true);
+			        							  arbitrator.getName());
+    		if (s.trim().length() > 0)
+    		{
+    			predictions[populationInstance.populationId].write(s, true);
+    		}
     	}
     	else
     	{
@@ -127,6 +130,7 @@ public class GAEngine {
     	// rank the population after evaluating their score
     	populationInstance.roundRank = ranked(populationInstance.genes);
 
+    	List<Gene> aa = populationInstance.roundRank;
     	// Set the new prediction for predictor
     	Gene firstInRank = populationInstance.roundRank.getFirst(); 
     	ScoreHolder firstInRankScore;
@@ -147,10 +151,12 @@ public class GAEngine {
         ScoreHolder newPrediction = arbitrator.new ScoreHolder();
 
         arbitrator.setIndicatorIndices(firstInRank.getIndicatorIndices());
+        newPrediction.barNumber = currBar.getBarNumber();
         newPrediction.name = arbitrator.getName();
         newPrediction.timestamp = firstInRankScore.timestamp;
         newPrediction.direction = firstInRankScore.direction;
         newPrediction.predictedMarketPrice = firstInRankScore.predictedMarketPrice;
+        newPrediction.score = firstInRankScore.score;
         
         arbitrator.getScores().publish(newPrediction);
         
@@ -193,16 +199,53 @@ public class GAEngine {
 
         ThreadLocalRandom rnd = ThreadLocalRandom.current();
 
-        // 2) Crossover (produce 'crossed' children)
-        for (int i = keep; i < keep + cross; i += 2) {
-        	if (i + 1 > populationInstance.size) break;
-        	Gene[] crossed = crossover(populationInstance, i, rnd);
-            next.add(crossed[0]);
-            next.add(crossed[1]);
+        List<Gene> toBeCrossed = new ArrayList<Gene>();
+        List<Gene> dontTouch = new ArrayList<Gene>();
+        for (int i = keep; i < keep + cross; i++) {
+        	Gene g = populationInstance.getGenes().get(i);
+        	if (g.getTotalBarsSurviving() >= props.getMinBarsBeforeReplacing())
+        	{
+        		toBeCrossed.add(g);
+        	}
+        	else
+        	{
+        		dontTouch.add(g);
+        	}
         }
+        if((int)((double)toBeCrossed.size() / 2) != toBeCrossed.size() / 2)
+        {
+        	dontTouch.add(toBeCrossed.getLast());
+        }
+        for(int i = 0; i < toBeCrossed.size() - 1; i += 2)
+        {
+        	Gene[] crossed = crossoverX(populationInstance.size, toBeCrossed, i, rnd);
+	        next.add(crossed[0]);
+	        next.add(crossed[1]);
+        }
+        next.addAll(dontTouch);
+        
+        // 2) Crossover (produce 'crossed' children)
+//        for (int i = keep; i < keep + cross; i += 2) {
+//        	if (i + 1 > populationInstance.size) break;
+//        	Gene[] crossed = crossover(populationInstance, i, rnd);
+//            next.add(crossed[0]);
+//            next.add(crossed[1]);
+//        }
 
         // 3) Replacement (random new)
-        while (next.size() < n) {
+        for (int i = keep + cross; i < populationInstance.getGenes().size(); i++) {
+        	Gene g = populationInstance.getGenes().get(i);
+        	if (g.getTotalBarsSurviving() >= props.getMinBarsBeforeReplacing())
+        	{
+                next.add(randomGene(populationInstance.size));
+        	}
+        	else
+        	{
+        		next.add(g);
+        	}
+        }
+        while(next.size() < n)
+        {
             next.add(randomGene(populationInstance.size));
         }
 
@@ -212,6 +255,32 @@ public class GAEngine {
         atrScale.reset();
         
         return populationInstance;
+    }
+
+    private Gene[] crossoverX(int geneSize, List<Gene> genes, int geneAIdx, ThreadLocalRandom rnd) {
+    	Gene[] crossed = new Gene[2];
+    	crossed[0] = genes.get(geneAIdx);
+        crossed[1] = genes.get(geneAIdx + 1);
+    	for (int i = 0; i < geneSize; i++) {
+            if (rnd.nextInt(2) == 1)
+            {
+            	int k = crossed[0].getIndicatorIndices()[i];
+            	crossed[0].getIndicatorIndices()[i] = crossed[1].getIndicatorIndices()[i];
+            	crossed[1].getIndicatorIndices()[i] = k;
+            }
+        }
+        String geneNameA = "";
+        String geneNameB = "";
+        for (int i = 0; i < geneSize; i++) {
+            geneNameA += catalog.get(crossed[0].getIndicatorIndices()[i]).getName() + " ";
+            geneNameB += catalog.get(crossed[1].getIndicatorIndices()[i]).getName() + " ";
+        }
+        crossed[0].setName(geneNameA);
+        crossed[0].resetIndicators();
+        crossed[1].setName(geneNameB);
+        crossed[1].resetIndicators();
+        
+        return crossed;
     }
 
     private Gene[] crossover(PopulationInstance populationInstance, int geneAIdx, ThreadLocalRandom rnd) {

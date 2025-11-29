@@ -42,7 +42,7 @@ public class ApplicationProperties {
     private double replacePct = 0.25;          // random new
     private double mutationRate = 0.08;        // per child
     private double mutationSwapRate = 0.30;    // chance to swap two loci in a gene
-    private int  minBarsBeforeScoring = 50;    // gene must see at least this many bars
+    private int  minBarsBeforeReplacing = 5;    // gene must see at least this many bars
     private boolean earlyCullAtEliteFloor = true;
     private int atrPeriodForScaling = 14;      // used to scale unbounded signals
     private double macdToAtrScale = 1.0;       // scale factor for MACD hist vs ATR
@@ -293,10 +293,10 @@ public class ApplicationProperties {
 	        	}
 	        }
 
-	        variable = "minBarsBeforeScoring";
+	        variable = "minBarsBeforeReplacing";
 	        if (properties.getProperty(variable) != null)
 	        {
-	        	minBarsBeforeScoring = Integer.parseInt(properties.getProperty(variable).trim());
+	        	minBarsBeforeReplacing = Integer.parseInt(properties.getProperty(variable).trim());
 	        }
 	    	variable = "atrPeriodForScaling";
 	        if (properties.getProperty(variable) != null)
@@ -670,8 +670,8 @@ public class ApplicationProperties {
 		return mutationSwapRate;
 	}
 
-	public int getMinBarsBeforeScoring() {
-		return minBarsBeforeScoring;
+	public int getMinBarsBeforeReplacing() {
+		return minBarsBeforeReplacing;
 	}
 
 	public boolean isEarlyCullAtEliteFloor() {

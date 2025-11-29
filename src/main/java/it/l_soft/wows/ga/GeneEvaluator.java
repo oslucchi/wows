@@ -53,12 +53,7 @@ public class GeneEvaluator {
     	SimpleDateFormat sdf = new SimpleDateFormat(props.getTimestampFormat());
     	
     	int marketDirection;
-    	if (Math.abs(currBar.getClose() - prevBar.getClose()) / currBar.getClose() 
-    			< props.getMinimalPriceChangeForDirection())
-    	{
-    		marketDirection = 0;
-    	}
-    	else if (currBar.getClose() > prevBar.getClose())
+		if (currBar.getClose() >= prevBar.getClose())
     	{
     		marketDirection = 1;
     	}
@@ -137,14 +132,16 @@ public class GeneEvaluator {
     			;
     		}
 
-
     		//prediction.score = Math.max(bar.getClose() * .05, denom / (distance + 1e-9)); // optional epsilon for safety
     		prediction.score = Math.min(currBar.getClose() * .05, 
     									1 / (distance + 1e-9)) * agreeOnDirection;// optional epsilon for safety
 
     		prediction.timestamp = currBar.getTimestamp();
     		g.setTotalScore(g.getTotalScore() + prediction.score);
-    		g.setTotalWin(g.getTotalWin() + (agreeOnDirection == 1 ? 1 : 0));
+    		if (prediction.successful) 
+    		{
+    			g.setTotalWin(g.getTotalWin() + 1);
+    		}
 
     		sb.append(String.format("%.4f,", prediction.score));
     	}
@@ -162,7 +159,7 @@ public class GeneEvaluator {
     		prediction.direction = (int) (Math.abs(predictedReturn) < props.getMinimalPriceChangeForDirection() ? 
     									  	0 
     									  :
-    										(Math.signum(predictedReturn) >= 0 ? 1 : -1)
+    										(predictedMoveNorm >= 0. ? 1 : -1)
     									  );
     		g.getScores().publish(prediction);
     	}
