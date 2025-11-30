@@ -5,6 +5,7 @@ public class MarketBar extends Message implements Bar {
     private double open, high, low, close;
     private long volume;
     private long barNumber = 0;
+    private long timestamp = 0;
     
     public MarketBar() {
     	super("B");
@@ -25,6 +26,7 @@ public class MarketBar extends Message implements Bar {
 
     // Getters
     @Override public long getBarNumber() { return barNumber; }
+	@Override public long getTimestamp() { return timestamp; }
     @Override public double getOpen() { return open; }
     @Override public double getHigh() { return high; }
     @Override public double getLow() { return low; }
@@ -54,4 +56,9 @@ public class MarketBar extends Message implements Bar {
 	public void setBarNumber(long barNumber) {
 		this.barNumber = barNumber;
 	}
+	
+	public void setTimestamp(long timestamp) {
+		this.timestamp = timestamp;
+	}
+
 }

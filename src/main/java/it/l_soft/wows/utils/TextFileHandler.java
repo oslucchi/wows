@@ -61,6 +61,10 @@ public class TextFileHandler {
         }
     }
     
+    public boolean canWrite() {
+    	return file.canWrite();
+    }
+    
     public void close() {
         try {
             if (fileBufWriter != null) {

@@ -18,48 +18,61 @@ public class ApplicationProperties {
 	
 	private static String propertiesPath = null;
 
+	// General
 	private int port;
 	private String host;
 	private long intraMessagePause;
+	private boolean consoleOut;
+
+	// Output
 	private String CSVFilePath;
-	private String geneEvolutionFilePath;
 	private String CSVPreamble;
+	private String geneEvolutionFilePath;
 	private String geneEvalDumpPath;
 	private String geneEvalDumpName;
-	private boolean consoleOut;
+	private boolean dumpGenes = false;
+	
 	private long shutdownGracePeriod;
-	private String indicatorsToInstantiate;
 	private String timestampFormat;
 
-	// GA configuration
-	private int[] geneSize = {5,5,5};                  // indicators per gene
-	private int[] populationSize = {200,200,200};
-	private int[] horizonBars = {1,3,5};               // predict next bar’s direction over this horizon
-	private int numberOfPopulations = 3;
-	private double holdThresholdPct = 0.1;     // abs % change <= this ⇒ HOLD
-	private double elitePct = 0.25;            // survive unchanged
-    private double crossoverPct = 0.50;        // produced by crossover
-    private double replacePct = 0.25;          // random new
-    private double mutationRate = 0.08;        // per child
-    private double mutationSwapRate = 0.30;    // chance to swap two loci in a gene
-    private int  minBarsBeforeReplacing = 5;    // gene must see at least this many bars
-    private boolean earlyCullAtEliteFloor = true;
-    private int atrPeriodForScaling = 14;      // used to scale unbounded signals
-    private double macdToAtrScale = 1.0;       // scale factor for MACD hist vs ATR
+	// Strategies and indicators
+    private String[] strategiesToUse;
+	private String indicatorsToInstantiate;
+
+    // GA configuration
+	private int numberOfWorlds = 3;				// How many different configurations will be held
+	private int[] geneSize = {5,5,5};			// indicators as gene cromosomes. Genes might have different number of cromosomes
+	private int[] populationSize = {200,200,200};	// how many genes in a world. Worlds might have different number of genes running
+	private int[] horizonBars = {1,3,5};		// lookforward. Place a prediction for n bars ahead. 1 horizon per world
+	// The total of the following should be 1
+	private double elitePct = 0.25;				// survive unchanged
+    private double crossoverPct = 0.50;			// generate new as crossover
+    private double generateNewPct = 0.25;			// random new
+    // Mutation parms
+    private double mutationSwapRate = 0.30;		// chance to swap two loci in a gene
+    private double mutationRate = 0.08;			// per child
+
+    // Composite prediction & scoring parameters
     private Price defaultPrice = Price.CLOSE;  // for trend comparators, etc.
-    private int validScoreHistoryLength = 100; // number of backward bars to consider for ranking
-    
+    private double macdToAtrScale = 1.0;       // scale factor for MACD hist vs ATR
+    private int atrPeriodForScaling = 14;      // used to scale unbounded signals
     private double predictionTemperature = 0.8; // tau for tanh smoothing
     private double volNormK = 1.25;             // scaling factor for volatility normalization
     private double scoreScale = 50.0;           // step score magnitude scaling
     private double atrNormScale = 25.0;
+    private int validScoreHistoryLength = 100; // number of backward bars to consider for ranking
+
+    private boolean earlyCullAtEliteFloor = true;
+    private double waitOfScoreInRanking = .65;
+    private double waitOfWinRateInRanking = .35;
     
+    private int  minBarsBeforeReplacing = 5;    // gene must see at least this many bars before being modified or removed
+
     private int barsInMemory = 1000;
     private int genesWarmUpBars = 20;
     private double minimalPriceChangeForDirection = 0;
     
-    private double waitOfScoreInRanking = .65;
-    private double waitOfWinRateInRanking = .35;
+	private double holdThresholdPct = 0.1;		// Abs % stating an HOLD status 
     		
 //	private int SMACrossing_ShortWindow = 50;
 //	private int SMACrossing_LongWindow = 200;
@@ -102,7 +115,6 @@ public class ApplicationProperties {
 //    private int StochasticRSI_StochasticPeriod = 14;
 //    private int StochasticRSI_RSIPeriod = 14;
     
-    private String[] strategiesToUse;
 	
     		
     public static ApplicationProperties getInstance(String propPath)
@@ -223,6 +235,13 @@ public class ApplicationProperties {
 	        	geneEvalDumpName = properties.getProperty(variable).trim();
 	        }
 
+	        
+			variable = "dumpGenes";
+	        if (properties.getProperty(variable) != null)
+	        {
+	        	dumpGenes = Boolean.parseBoolean(properties.getProperty(variable).trim());
+	        }
+
 	        variable = "timestampFormat";
 	        if (properties.getProperty(variable) != null)
 	        {
@@ -336,10 +355,10 @@ public class ApplicationProperties {
 	        {
 	        	crossoverPct = Double.parseDouble(properties.getProperty(variable).trim());
 	        }
-	    	variable = "replacePct";
+	    	variable = "generateNewPct";
 	        if (properties.getProperty(variable) != null)
 	        {
-	        	replacePct = Double.parseDouble(properties.getProperty(variable).trim());
+	        	generateNewPct = Double.parseDouble(properties.getProperty(variable).trim());
 	        }
 	    	variable = "mutationRate";
 	        if (properties.getProperty(variable) != null)
@@ -658,8 +677,8 @@ public class ApplicationProperties {
 		return crossoverPct;
 	}
 
-	public double getReplacePct() {
-		return replacePct;
+	public double getGenerateNewPct() {
+		return generateNewPct;
 	}
 
 	public double getMutationRate() {
@@ -758,8 +777,8 @@ public class ApplicationProperties {
 		return geneEvalDumpName;
 	}
 
-	public int getNumberOfPopulations() {
-		return numberOfPopulations;
+	public int getNumberOfWorlds() {
+		return numberOfWorlds;
 	}
 
 	public double getMinimalPriceChangeForDirection() {
@@ -768,6 +787,10 @@ public class ApplicationProperties {
 
 	public String getTimestampFormat() {
 		return timestampFormat;
+	}
+
+	public boolean getDumpGenes() {
+		return dumpGenes;
 	}
     
     

@@ -114,6 +114,7 @@ public final class MassIndex extends AbstractIndicator {
             @Override public double getLow()       { return x; }
             @Override public double getClose()     { return x; }
             @Override public long   getVolume()    { return 0L; }
+            @Override public long   getTimestamp()    { return 0L; }
         };
     }
 }

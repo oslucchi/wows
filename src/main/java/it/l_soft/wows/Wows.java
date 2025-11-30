@@ -2,7 +2,6 @@ package it.l_soft.wows;
 
 import java.io.BufferedReader;
 import java.io.File;
-import java.io.IOException;
 import java.io.InputStreamReader;
 import java.util.ArrayList;
 import java.util.Date;
@@ -18,6 +17,7 @@ import it.l_soft.wows.comms.RunInstance;
 import it.l_soft.wows.comms.TCPBasedInstance;
 import it.l_soft.wows.indicators.Indicator;
 import it.l_soft.wows.indicators.IndicatorFactory;
+import it.l_soft.wows.utils.TextFileHandler;
 
 public class Wows {
 	static final Logger log = Logger.getLogger(Wows.class);
@@ -30,12 +30,13 @@ public class Wows {
 	static boolean[] options = {false,false,false};
 	static String usage = String.format("usage: wows [-d csv bars folder [-h how many bars]] [-s stats file path]");
 	static List<Indicator> indicators = new ArrayList<Indicator>();
-	static File sourceDir = null, statsOut = null;
+	static File sourceDir = null;
+	static TextFileHandler statsOut = null;
 	static RunInstance instance = null;
 	static int howManyBarsRead = -1;
 	
 	private static void initInlineOptions(String[] args) 
-			throws IOException
+			throws Exception
 	{
 		for(int i = 0; i < args.length; i++)
 		{
@@ -57,8 +58,8 @@ public class Wows {
 			case "-s":
 				i++;
 				statsFilePath = args[i];
-				statsOut = new File(statsFilePath);
-				statsOut.createNewFile();
+				statsOut = new TextFileHandler(props.getCSVFilePath(), "MassiveStats", "csv", true, false);
+				
 				if (!statsOut.canWrite())
 				{
 					System.out.println("the specified path " + statsFilePath + " is not accessible or can't be written");
@@ -164,11 +165,8 @@ public class Wows {
         {
         	// Perform on a list files contained in the folder passed as parameter
         	File[] files = sourceDir.listFiles();
-			if (statsOut == null)
-			{
-				statsOut = new File(props.getCSVFilePath() + "/stats_massive.csv");
-			}
-
+        	statsOut.write("Filename,ForwardBar,TotalRecords,Matches,MatchesPercent," + 
+						   "Flat,FlatPercent,Errors,ErrorsPercent,Accuracy", true);
         	// Print name of the all files present in that path
         	if (files != null) {
         		for (File file : files) {
